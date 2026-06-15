@@ -1,6 +1,6 @@
 {
   "name": "opencue",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Open-source meeting copilot desktop app: real-time transcription, AI assistance, and an always-on-top overlay excluded from screen sharing. Bring your own keys or run fully local.",
   "author": {
     "name": "mudassar531",
