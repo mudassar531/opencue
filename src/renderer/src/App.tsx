@@ -3,6 +3,7 @@ import type { OpencueSettings, OverlayState } from '../../shared/ipc-contract';
 import { HotkeyAction } from '../../shared/settings-schema';
 import { AssistPanel } from './components/AssistPanel';
 import { AudioPanel } from './components/AudioPanel';
+import { LocalModelsPanel } from './components/LocalModelsPanel';
 import { ProviderSettings } from './components/ProviderSettings';
 
 interface AppInfo {
@@ -80,14 +81,13 @@ export function App(): JSX.Element {
     <div className="flex h-full flex-col items-center justify-start gap-6 overflow-y-auto bg-slate-950 p-8 text-slate-100">
       <header className="flex flex-col items-center gap-2">
         <div className="rounded-full bg-cue-500/20 px-4 py-1 text-xs font-medium uppercase tracking-widest text-cue-300">
-          phase 3 · providers &amp; assist
+          phase 4 · local models &amp; sidecar
         </div>
         <h1 className="text-4xl font-semibold tracking-tight">opencue</h1>
         <p className="max-w-xl text-center text-sm text-slate-400">
-          Open-source meeting copilot. Capture audio on-device, transcribe and
-          assist with the provider you choose, and surface answers in the
-          always-on-top overlay. Bring your own keys today, run fully local in
-          Phase 4.
+          Open-source meeting copilot. Cloud providers, local models via a Python
+          sidecar, or local LLMs via Ollama — switch at runtime in settings.
+          The audio pipeline + overlay stay the same.
         </p>
       </header>
 
@@ -213,10 +213,12 @@ export function App(): JSX.Element {
 
       <ProviderSettings />
 
+      <LocalModelsPanel />
+
       <AssistPanel />
 
       <footer className="text-xs text-slate-500">
-        Next up — Phase 4: Python sidecar + local models with download progress.
+        Next up — Phase 5: on-demand screen capture for multimodal Ask.
       </footer>
     </div>
   );

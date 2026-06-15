@@ -121,6 +121,24 @@ const bridge: OpencueBridge = {
     onTtsAudio: (listener) => subscribe(IpcEvent.AssistTtsAudio, listener),
     onReset: (listener) => subscribe(IpcEvent.AssistReset, () => listener()),
   },
+  models: {
+    listStatuses: () => invoke(IpcChannel.ModelsListStatuses),
+    download: (modelId) => invoke(IpcChannel.ModelsDownload, { modelId }),
+    cancelDownload: (modelId) => invoke(IpcChannel.ModelsCancelDownload, { modelId }),
+    remove: (modelId) => invoke(IpcChannel.ModelsRemove, { modelId }),
+    onStatusChanged: (listener) => subscribe(IpcEvent.ModelStatusChanged, listener),
+  },
+  sidecar: {
+    getStatus: () => invoke(IpcChannel.SidecarGetStatus),
+    checkInstalled: () => invoke(IpcChannel.SidecarCheckInstalled),
+    start: () => invoke(IpcChannel.SidecarStart),
+    stop: () => invoke(IpcChannel.SidecarStop),
+    onStatusChanged: (listener) => subscribe(IpcEvent.SidecarStatusChanged, listener),
+    onLog: (listener) => subscribe(IpcEvent.SidecarLog, listener),
+  },
+  ollama: {
+    listModels: () => invoke(IpcChannel.OllamaListModels),
+  },
 };
 
 contextBridge.exposeInMainWorld('opencue', bridge);

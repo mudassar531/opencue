@@ -18,6 +18,7 @@ import type {
   AudioSource,
   AudioSourceList,
 } from './audio-types.js';
+import type { ModelStatus, ModelStatusEntry } from './model-registry.js';
 import type {
   AssistStatus,
   AssistSuggestion,
@@ -46,6 +47,8 @@ export type {
   HotkeyActionValue,
   HotkeyMap,
   LlmProviderIdValue,
+  ModelStatus,
+  ModelStatusEntry,
   OpencueSettings,
   OverlayPositionValue,
   OverlaySettings,
@@ -54,6 +57,13 @@ export type {
   TranscriptEntry,
   TtsProviderIdValue,
 };
+
+/** Status of the Python sidecar process. Mirrors `SidecarStatus` in main. */
+export type SidecarStatus =
+  | { state: 'stopped' }
+  | { state: 'starting'; pid: number; startedAt: number }
+  | { state: 'running'; pid: number; startedAt: number; port: number }
+  | { state: 'error'; message: string };
 
 /** Capabilities surfaced by the provider router for the settings UI. */
 export interface ProviderCapabilities {
@@ -142,6 +152,17 @@ export const IpcChannel = {
   AssistRun: 'assist:run',
   AssistCancel: 'assist:cancel',
   AssistReset: 'assist:reset',
+
+  // Local models + sidecar (Phase 4).
+  ModelsListStatuses: 'models:list-statuses',
+  ModelsDownload: 'models:download',
+  ModelsCancelDownload: 'models:cancel-download',
+  ModelsRemove: 'models:remove',
+  SidecarGetStatus: 'sidecar:get-status',
+  SidecarCheckInstalled: 'sidecar:check-installed',
+  SidecarStart: 'sidecar:start',
+  SidecarStop: 'sidecar:stop',
+  OllamaListModels: 'ollama:list-models',
 } as const;
 
 export type IpcChannelValue = (typeof IpcChannel)[keyof typeof IpcChannel];
@@ -322,6 +343,44 @@ export interface IpcContract {
     request: void;
     response: { ok: true };
   };
+
+  /* ---------- Local models + sidecar (Phase 4) ---------- */
+  [IpcChannel.ModelsListStatuses]: {
+    request: void;
+    response: ModelStatusEntry[];
+  };
+  [IpcChannel.ModelsDownload]: {
+    request: { modelId: string };
+    response: { ok: true };
+  };
+  [IpcChannel.ModelsCancelDownload]: {
+    request: { modelId: string };
+    response: { ok: true };
+  };
+  [IpcChannel.ModelsRemove]: {
+    request: { modelId: string };
+    response: { ok: true };
+  };
+  [IpcChannel.SidecarGetStatus]: {
+    request: void;
+    response: SidecarStatus;
+  };
+  [IpcChannel.SidecarCheckInstalled]: {
+    request: void;
+    response: { installed: boolean; scriptPath: string };
+  };
+  [IpcChannel.SidecarStart]: {
+    request: void;
+    response: SidecarStatus;
+  };
+  [IpcChannel.SidecarStop]: {
+    request: void;
+    response: { ok: true };
+  };
+  [IpcChannel.OllamaListModels]: {
+    request: void;
+    response: { reachable: boolean; models: string[]; baseUrl: string };
+  };
 }
 
 export type IpcRequest<C extends IpcChannelValue> = IpcContract[C]['request'];
@@ -345,6 +404,9 @@ export const IpcEvent = {
   AssistSuggestionError: 'event:assist-suggestion-error',
   AssistTtsAudio: 'event:assist-tts-audio',
   AssistReset: 'event:assist-reset',
+  ModelStatusChanged: 'event:model-status-changed',
+  SidecarStatusChanged: 'event:sidecar-status-changed',
+  SidecarLog: 'event:sidecar-log',
 } as const;
 
 export type IpcEventValue = (typeof IpcEvent)[keyof typeof IpcEvent];
@@ -363,9 +425,11 @@ export interface IpcEventPayloads {
   [IpcEvent.AssistSuggestionDelta]: { suggestionId: number; delta: string; textSoFar: string };
   [IpcEvent.AssistSuggestionCompleted]: AssistSuggestion;
   [IpcEvent.AssistSuggestionError]: { suggestionId: number; message: string };
-  /** Audio is base64-encoded so it survives the IPC structured clone path. */
   [IpcEvent.AssistTtsAudio]: { suggestionId: number; mimeType: string; audioBase64: string };
   [IpcEvent.AssistReset]: Record<string, never>;
+  [IpcEvent.ModelStatusChanged]: ModelStatusEntry;
+  [IpcEvent.SidecarStatusChanged]: SidecarStatus;
+  [IpcEvent.SidecarLog]: { stream: 'stdout' | 'stderr'; text: string };
 }
 
 /* ---------------- Renderer-facing bridge ---------------- */
@@ -492,5 +556,25 @@ export interface OpencueBridge {
       listener: (args: { suggestionId: number; mimeType: string; audioBase64: string }) => void,
     ): () => void;
     onReset(listener: () => void): () => void;
+  };
+  models: {
+    listStatuses(): Promise<IpcResponse<typeof IpcChannel.ModelsListStatuses>>;
+    download(modelId: string): Promise<IpcResponse<typeof IpcChannel.ModelsDownload>>;
+    cancelDownload(
+      modelId: string,
+    ): Promise<IpcResponse<typeof IpcChannel.ModelsCancelDownload>>;
+    remove(modelId: string): Promise<IpcResponse<typeof IpcChannel.ModelsRemove>>;
+    onStatusChanged(listener: (entry: ModelStatusEntry) => void): () => void;
+  };
+  sidecar: {
+    getStatus(): Promise<IpcResponse<typeof IpcChannel.SidecarGetStatus>>;
+    checkInstalled(): Promise<IpcResponse<typeof IpcChannel.SidecarCheckInstalled>>;
+    start(): Promise<IpcResponse<typeof IpcChannel.SidecarStart>>;
+    stop(): Promise<IpcResponse<typeof IpcChannel.SidecarStop>>;
+    onStatusChanged(listener: (status: SidecarStatus) => void): () => void;
+    onLog(listener: (entry: { stream: 'stdout' | 'stderr'; text: string }) => void): () => void;
+  };
+  ollama: {
+    listModels(): Promise<IpcResponse<typeof IpcChannel.OllamaListModels>>;
   };
 }

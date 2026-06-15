@@ -9,7 +9,7 @@
 
 ## Status
 
-🚧 Early development. Currently on **Phase 4 — Python sidecar + local models** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+🚧 Early development. Currently on **Phase 5 — Screen context ("ask about your screen")** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -17,7 +17,7 @@
 | 1 | Overlay window & global hotkeys | ✅ shipped |
 | 2 | Audio capture pipeline (loopback + mic + VAD) | ✅ shipped |
 | 3 | Provider abstraction + cloud STT/LLM/TTS | ✅ shipped |
-| 4 | Python sidecar + local models + model manager | ⏳ |
+| 4 | Python sidecar + local models + model manager | ✅ shipped |
 | 5 | Screen context ("ask about your screen") | ⏳ |
 | 6 | Meeting integrations, sessions & export | ⏳ |
 | 7 | Packaging, auto-update & release | ⏳ |
@@ -108,6 +108,41 @@ With keys configured:
 4. Open the overlay's ask-bar (`⌘⇧/`) or use the **Ask** form in the main window to type a freeform question. Set the **TTS auto-play** toggle if you want the answer spoken.
 
 Local providers (faster-whisper / Parakeet / Piper / Kokoro / Ollama) land in Phase 4 behind the exact same interface, so switching cloud ↔ local is a single settings change.
+
+## Run fully local (Phase 4)
+
+opencue ships local STT (faster-whisper, Parakeet) and TTS (Piper, Kokoro) through a small Python sidecar, plus local LLM via [Ollama](https://ollama.com). The pipeline above is unchanged — switching cloud ↔ local is a settings change.
+
+### One-time setup
+
+```bash
+# 1. Install the sidecar's Python deps (Phase 7 will bundle this).
+python3 -m venv sidecar/.venv
+source sidecar/.venv/bin/activate   # Windows: sidecar\.venv\Scripts\activate
+pip install -r sidecar/requirements.txt
+
+# 2. (Optional) install Ollama for local LLM.
+#    See https://ollama.com — then `ollama pull llama3.2` (or your favourite).
+```
+
+### Inside opencue
+
+1. **Local models & sidecar** panel → pick a model, hit **download** (live MB/s + ETA shown).
+2. Click **Start sidecar** when the green dot stays off; you'll see it flip to `running` once the Python process reports ready.
+3. **Providers & API keys** → switch *Speech-to-text* to **Local sidecar**, model = the one you downloaded. Same for *Text-to-speech* (Piper / Kokoro) and *Language model* (**Ollama (local)** + the tag you pulled).
+4. Capture audio → the Assist loop now runs 100% offline.
+
+The model catalog is curated — see [`src/shared/model-registry.ts`](src/shared/model-registry.ts). Notable members:
+
+| Runtime | Sizes shipped |
+| --- | --- |
+| faster-whisper | tiny.en (~75 MB), base.en (~142 MB), small.en (~470 MB), medium.en (~1.5 GB), large-v3 (~3 GB multilingual) |
+| Parakeet (NVIDIA ASR — GPU recommended) | parakeet-tdt-0.6b-v2 (~626 MB) |
+| Piper | Amy en-US medium (~63 MB), Alan en-GB medium (~63 MB) |
+| Kokoro | kokoro-v0_19 (~327 MB multilingual) |
+| Ollama LLM | bring your own — opencue probes `/api/tags` and lists what you've pulled |
+
+> Parakeet is an ASR (speech-to-text) family from NVIDIA, so it appears under STT — not TTS. Local TTS uses Piper / Kokoro.
 
 ## Build from source
 

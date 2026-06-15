@@ -56,12 +56,14 @@
     "onnxruntime-web": "^1.26.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "ws": "^8.21.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.20.0",
     "@typescript-eslint/parser": "^8.20.0",
     "@vitejs/plugin-react": "^4.3.4",

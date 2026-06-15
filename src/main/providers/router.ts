@@ -27,11 +27,14 @@ import { getSettingsStore } from '../settings/store.js';
 import { AnthropicProvider } from './llm/anthropic.js';
 import { GeminiProvider } from './llm/gemini.js';
 import { GroqProvider } from './llm/groq.js';
+import { OllamaProvider } from './llm/ollama.js';
 import { OpenAiLlmProvider } from './llm/openai.js';
 import { AssemblyAiProvider } from './stt/assemblyai.js';
 import { DeepgramProvider } from './stt/deepgram.js';
+import { LocalSidecarSttProvider } from './stt/local-sidecar.js';
 import { OpenAiWhisperProvider } from './stt/openai-whisper.js';
 import { ElevenLabsProvider } from './tts/elevenlabs.js';
+import { LocalSidecarTtsProvider } from './tts/local-sidecar.js';
 import { OpenAiTtsProvider } from './tts/openai.js';
 
 export interface ProviderRouterDeps {
@@ -72,31 +75,25 @@ export class ProviderRouter {
       voices: readonly string[];
     }[];
   } {
-    const stt = Object.values(SttProviderId)
-      .filter((id) => id !== SttProviderId.LocalSidecar)
-      .map((id) => {
-        const p = buildStt(id);
-        return { id: p.id, displayName: p.displayName, models: p.availableModels };
-      });
+    const stt = Object.values(SttProviderId).map((id) => {
+      const p = buildStt(id);
+      return { id: p.id, displayName: p.displayName, models: p.availableModels };
+    });
 
-    const llm = Object.values(LlmProviderId)
-      .filter((id) => id !== LlmProviderId.Ollama)
-      .map((id) => {
-        const p = buildLlm(id);
-        return { id: p.id, displayName: p.displayName, models: p.availableModels };
-      });
+    const llm = Object.values(LlmProviderId).map((id) => {
+      const p = buildLlm(id);
+      return { id: p.id, displayName: p.displayName, models: p.availableModels };
+    });
 
-    const tts = Object.values(TtsProviderId)
-      .filter((id) => id !== TtsProviderId.LocalSidecar)
-      .map((id) => {
-        const p = buildTts(id);
-        return {
-          id: p.id,
-          displayName: p.displayName,
-          models: p.availableModels,
-          voices: p.availableVoices,
-        };
-      });
+    const tts = Object.values(TtsProviderId).map((id) => {
+      const p = buildTts(id);
+      return {
+        id: p.id,
+        displayName: p.displayName,
+        models: p.availableModels,
+        voices: p.availableVoices,
+      };
+    });
 
     return { stt, llm, tts };
   }
@@ -111,9 +108,7 @@ export function buildStt(id: SttProviderIdValue, model?: string): SttProvider {
     case SttProviderId.AssemblyAI:
       return new AssemblyAiProvider(model);
     case SttProviderId.LocalSidecar:
-      // Phase 4 will register the real local STT here; for now fall back to
-      // Whisper so callers never get an undefined provider.
-      return new OpenAiWhisperProvider(model);
+      return new LocalSidecarSttProvider(model);
     default: {
       const _exhaustive: never = id;
       void _exhaustive;
@@ -133,8 +128,7 @@ export function buildLlm(id: LlmProviderIdValue, model?: string): LlmProvider {
     case LlmProviderId.Groq:
       return new GroqProvider(model);
     case LlmProviderId.Ollama:
-      // Phase 4 wires local Ollama; fall back to OpenAI to keep the surface populated.
-      return new OpenAiLlmProvider(model);
+      return new OllamaProvider(model);
     default: {
       const _exhaustive: never = id;
       void _exhaustive;
@@ -150,7 +144,7 @@ export function buildTts(id: TtsProviderIdValue, model?: string, voice?: string)
     case TtsProviderId.ElevenLabs:
       return new ElevenLabsProvider(model, voice);
     case TtsProviderId.LocalSidecar:
-      return new OpenAiTtsProvider(model, voice);
+      return new LocalSidecarTtsProvider(model, voice);
     default: {
       const _exhaustive: never = id;
       void _exhaustive;

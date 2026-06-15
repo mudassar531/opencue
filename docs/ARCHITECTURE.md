@@ -230,6 +230,47 @@ API keys are entered in the **Providers & API keys** panel and stored encrypted 
 
 `.env.example` lists the same variables for developer convenience, but real `.env` is git-ignored and the runtime never reads it.
 
+## Local sidecar + model manager (Phase 4)
+
+```text
+ModelManager (main)
+    │
+    ├── downloads → userData/models/<id>/{model.bin, config.json, ...}
+    │                  │  (sha256 verified + .opencue-installed.json marker)
+    │                  ▼
+    │           SidecarManager (main) ── spawn ──► Python aiohttp / JSON-RPC
+    │                                                  │
+    │                                                  ├── faster-whisper
+    │                                                  ├── piper-tts
+    │                                                  └── (Parakeet — runtime gate)
+    │
+    └── status events ──► IPC ──► Local models panel UI
+```
+
+`LocalSidecarSttProvider` and `LocalSidecarTtsProvider` (`src/main/providers/{stt,tts}/local-sidecar.ts`) implement the Phase-3 `SttProvider` / `TtsProvider` interfaces and forward calls to the sidecar over `ws://127.0.0.1:<port>/rpc`. The router falls through to them when the user picks `local-sidecar` for either capability — no other code needs to change.
+
+For LLM, `OllamaProvider` (`src/main/providers/llm/ollama.ts`) talks directly to `http://127.0.0.1:11434/api/chat` (NDJSON streaming). The Local models panel pings `/api/tags` so the user can see whether Ollama is installed and which models are pulled.
+
+### Curated model registry (`src/shared/model-registry.ts`)
+
+A static, fully-typed catalog of downloadable models — id, kind, runtime, size, URL list, optional sha256, languages, hardware hint. The renderer reads it directly to render the picker; main reads it from the model manager to drive downloads. Everything ships in `userData/models/<modelId>/` so the sidecar can mount the same paths.
+
+### Sidecar lifecycle
+
+```text
+stopped ──spawn──► starting ──"opencue-sidecar ready"──► running
+                       │                                    │
+                       └──── any error / exit ──► error ────┘
+                                                            │
+                                                       app:will-quit ──► stop
+```
+
+A timeout (15 s default) reverts to `error` if the readiness marker never arrives, and `SidecarManager.stop()` runs on `will-quit` so we never leak Python processes.
+
+### Where downloads live
+
+`<app userData>/models/<modelId>/`. On macOS that's typically `~/Library/Application Support/opencue/models/<modelId>/`. Each finished install writes `.opencue-installed.json` next to the files so subsequent launches detect the model without re-downloading or re-hashing.
+
 ## Provider abstraction (planned — Phase 3)
 
 ```text
@@ -270,20 +311,37 @@ Models are not bundled. The main-process **model manager** downloads them on dem
 ├── docs/
 │   ├── ARCHITECTURE.md     # this file
 │   └── BUILD_PROMPT.md     # the master spec
+├── sidecar/                # Python aiohttp + JSON-RPC; Phase 4
+│   ├── main.py
+│   ├── requirements.txt
+│   └── README.md
 ├── src/
 │   ├── main/               # Electron main process (privileged)
 │   │   ├── index.ts
 │   │   ├── ipc.ts
+│   │   ├── assist/
+│   │   │   ├── assist-orchestrator.ts
+│   │   │   ├── transcript-buffer.ts        # + .test.ts
 │   │   ├── audio/
-│   │   │   ├── audio-orchestrator.ts
-│   │   │   └── audio-orchestrator.test.ts
-│   │   ├── overlay/
-│   │   │   ├── overlay-window.ts
-│   │   │   └── overlay-window.test.ts
+│   │   │   ├── audio-orchestrator.ts       # + .test.ts
 │   │   ├── hotkeys/
 │   │   │   └── hotkey-manager.ts
-│   │   └── settings/
-│   │       └── store.ts            # electron-store + safeStorage
+│   │   ├── models/
+│   │   │   └── model-manager.ts            # downloads + sha256 + status events
+│   │   ├── overlay/
+│   │   │   ├── overlay-window.ts           # + .test.ts
+│   │   ├── providers/
+│   │   │   ├── llm/  (openai, anthropic, gemini, groq, ollama, sse)
+│   │   │   ├── stt/  (openai-whisper, deepgram, assemblyai, local-sidecar)
+│   │   │   ├── tts/  (openai, elevenlabs, local-sidecar)
+│   │   │   ├── router.ts                   # + .test.ts
+│   │   │   ├── secret-keys.ts
+│   │   │   └── wav.ts                       # + .test.ts
+│   │   ├── settings/
+│   │   │   └── store.ts                    # electron-store + safeStorage
+│   │   └── sidecar/
+│   │       ├── rpc-client.ts               # WebSocket / JSON-RPC client
+│   │       └── sidecar-manager.ts          # spawn / health / shutdown
 │   ├── preload/            # contextBridge — ONLY path to the renderer
 │   │   └── index.ts
 │   ├── renderer/           # React UI — no Node access
@@ -291,24 +349,27 @@ Models are not bundled. The main-process **model manager** downloads them on dem
 │   │   └── src/
 │   │       ├── App.tsx
 │   │       ├── main.tsx
-│   │       ├── index.css
-│   │       ├── env.d.ts
 │   │       ├── audio/
 │   │       │   ├── capture-controller.ts
-│   │       │   ├── level-meter.ts        # + .test.ts
-│   │       │   ├── ring-buffer.ts        # + .test.ts
+│   │       │   ├── level-meter.ts          # + .test.ts
+│   │       │   ├── ring-buffer.ts          # + .test.ts
 │   │       │   ├── system-audio-capture.ts
 │   │       │   └── vad-stream.ts
 │   │       ├── components/
+│   │       │   ├── AssistPanel.tsx
 │   │       │   ├── AudioPanel.tsx
 │   │       │   ├── AudioSourcePicker.tsx
-│   │       │   └── LevelMeter.tsx
+│   │       │   ├── LevelMeter.tsx
+│   │       │   ├── LocalModelsPanel.tsx
+│   │       │   └── ProviderSettings.tsx
 │   │       └── overlay/
 │   │           └── Overlay.tsx
 │   └── shared/             # types shared by main, preload, renderer
 │       ├── audio-types.ts
-│       ├── ipc-contract.ts
-│       ├── settings-schema.ts
+│       ├── ipc-contract.ts                 # + .test.ts
+│       ├── model-registry.ts               # + .test.ts
+│       ├── provider-types.ts
+│       ├── settings-schema.ts              # + .test.ts
 │       └── constants.ts
 ├── .github/workflows/      # CI matrix (Windows + macOS + Linux)
 ├── electron.vite.config.ts # also copies Silero VAD assets to /vad/

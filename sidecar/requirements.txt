@@ -1,0 +1,15 @@
+# opencue Python sidecar requirements.
+#
+# Install with:
+#
+#   python3 -m venv sidecar/.venv
+#   source sidecar/.venv/bin/activate   # (Windows: sidecar\.venv\Scripts\activate)
+#   pip install -r sidecar/requirements.txt
+#
+# Then point opencue at the venv's Python in the Local models panel
+# (or set OPENCUE_PYTHON to the absolute path).
+
+aiohttp>=3.10,<4
+faster-whisper>=1.0,<2
+piper-tts>=1.2,<2
+numpy>=1.26,<3

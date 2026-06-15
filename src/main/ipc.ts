@@ -20,7 +20,9 @@ import { type HotkeyActionValue } from '../shared/settings-schema.js';
 import { getAssistOrchestrator } from './assist/assist-orchestrator.js';
 import { getAudioOrchestrator } from './audio/audio-orchestrator.js';
 import { getHotkeyManager } from './hotkeys/hotkey-manager.js';
+import { getModelManager } from './models/model-manager.js';
 import { getOverlayManager, type OverlayEvent } from './overlay/overlay-window.js';
+import { OllamaProvider } from './providers/llm/ollama.js';
 import {
   deleteApiKey,
   getApiKeyPresenceMap,
@@ -28,6 +30,7 @@ import {
 } from './providers/secret-keys.js';
 import { getProviderRouter } from './providers/router.js';
 import { getSecretStore, getSettingsStore } from './settings/store.js';
+import { getSidecarManager } from './sidecar/sidecar-manager.js';
 
 type Handler<C extends IpcChannelValue> = (
   event: IpcMainInvokeEvent,
@@ -257,6 +260,40 @@ export function registerIpcHandlers(): void {
     getAssistOrchestrator().reset();
     return { ok: true as const };
   });
+
+  /* ---------------- Local models + sidecar (Phase 4) ---------------- */
+  handle(IpcChannel.ModelsListStatuses, () => getModelManager().listStatuses());
+  handle(IpcChannel.ModelsDownload, async (_event, { modelId }) => {
+    // Fire-and-forget — progress is reported via the `model-status-changed` event.
+    void getModelManager()
+      .download(modelId)
+      .catch(() => undefined);
+    return { ok: true as const };
+  });
+  handle(IpcChannel.ModelsCancelDownload, async (_event, { modelId }) => {
+    await getModelManager().cancel(modelId);
+    return { ok: true as const };
+  });
+  handle(IpcChannel.ModelsRemove, async (_event, { modelId }) => {
+    await getModelManager().remove(modelId);
+    return { ok: true as const };
+  });
+  handle(IpcChannel.SidecarGetStatus, () => getSidecarManager().getStatus());
+  handle(IpcChannel.SidecarCheckInstalled, async () => {
+    const scriptPath = getSidecarManager().defaultScriptPath();
+    const installed = await getSidecarManager().checkScriptExists(scriptPath);
+    return { installed, scriptPath };
+  });
+  handle(IpcChannel.SidecarStart, async () => getSidecarManager().start());
+  handle(IpcChannel.SidecarStop, async () => {
+    await getSidecarManager().stop();
+    return { ok: true as const };
+  });
+  handle(IpcChannel.OllamaListModels, async () => {
+    const baseUrl = process.env.OPENCUE_OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434';
+    const models = await OllamaProvider.listInstalled(baseUrl);
+    return { reachable: models.length > 0 || models !== undefined, models, baseUrl };
+  });
 }
 
 /**
@@ -338,5 +375,17 @@ export function wireEventBroadcasts(): void {
         broadcastEvent(IpcEvent.AssistReset, {});
         break;
     }
+  });
+
+  getModelManager().on('status', (entry) => {
+    broadcastEvent(IpcEvent.ModelStatusChanged, entry);
+  });
+
+  const sidecar = getSidecarManager();
+  sidecar.on('status', (status) => {
+    broadcastEvent(IpcEvent.SidecarStatusChanged, status);
+  });
+  sidecar.on('log', (entry) => {
+    broadcastEvent(IpcEvent.SidecarLog, entry);
   });
 }
