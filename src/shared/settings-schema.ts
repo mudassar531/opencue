@@ -6,8 +6,12 @@
  * the shape changes in an incompatible way and add a migration in `store.ts`.
  */
 
+import { DEFAULT_PROVIDER_SELECTION, type ProviderSelection } from './provider-types.js';
+
+export type { ProviderSelection } from './provider-types.js';
+
 /** Bump on every breaking change to the persisted shape. */
-export const SETTINGS_SCHEMA_VERSION = 1;
+export const SETTINGS_SCHEMA_VERSION = 2;
 
 /** Tunable opacity range for the overlay. */
 export const OVERLAY_OPACITY_MIN = 0.3;
@@ -75,6 +79,7 @@ export interface OpencueSettings {
   schemaVersion: number;
   overlay: OverlaySettings;
   hotkeys: HotkeyMap;
+  providers: ProviderSelection;
 }
 
 export const DEFAULT_HOTKEYS: HotkeyMap = {
@@ -92,7 +97,7 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   clickThrough: false,
   alwaysOnTop: true,
   position: null,
-  size: { width: 420, height: 320 },
+  size: { width: 460, height: 380 },
   positionPreset: OverlayPosition.TopRight,
   showOnLaunch: true,
 };
@@ -101,6 +106,7 @@ export const DEFAULT_SETTINGS: OpencueSettings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
   overlay: DEFAULT_OVERLAY_SETTINGS,
   hotkeys: { ...DEFAULT_HOTKEYS },
+  providers: structuredClone(DEFAULT_PROVIDER_SELECTION),
 };
 
 /** Clamp opacity to the allowed range. Pure — safe to use in tests. */

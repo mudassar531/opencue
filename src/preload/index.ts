@@ -88,6 +88,39 @@ const bridge: OpencueBridge = {
     onLevelTick: (listener) => subscribe(IpcEvent.AudioLevelTick, listener),
     onSegmentReady: (listener) => subscribe(IpcEvent.AudioSegmentReady, listener),
   },
+  providers: {
+    getCapabilities: () => invoke(IpcChannel.ProvidersGetCapabilities),
+    getKeyPresence: () => invoke(IpcChannel.ProvidersGetKeyPresence),
+    setApiKey: (scope, providerId, apiKey) =>
+      invoke(IpcChannel.ProvidersSetApiKey, { scope, providerId, apiKey }),
+    deleteApiKey: (scope, providerId) =>
+      invoke(IpcChannel.ProvidersDeleteApiKey, { scope, providerId }),
+    updateSelection: (patch) => invoke(IpcChannel.ProvidersUpdateSelection, patch),
+  },
+  assist: {
+    getTranscript: () => invoke(IpcChannel.AssistGetTranscript),
+    getSuggestions: () => invoke(IpcChannel.AssistGetSuggestions),
+    getStatus: () => invoke(IpcChannel.AssistGetStatus),
+    submitSegment: (args) => invoke(IpcChannel.AssistSubmitSegment, args),
+    run: (args) => invoke(IpcChannel.AssistRun, args),
+    cancel: () => invoke(IpcChannel.AssistCancel),
+    reset: () => invoke(IpcChannel.AssistReset),
+    onStatusChanged: (listener) =>
+      subscribe(IpcEvent.AssistStatusChanged, (payload) => listener(payload.status, payload.error)),
+    onTranscriptEntry: (listener) => subscribe(IpcEvent.AssistTranscriptEntry, listener),
+    onSuggestionStarted: (listener) => subscribe(IpcEvent.AssistSuggestionStarted, listener),
+    onSuggestionDelta: (listener) =>
+      subscribe(IpcEvent.AssistSuggestionDelta, (payload) =>
+        listener(payload.suggestionId, payload.delta, payload.textSoFar),
+      ),
+    onSuggestionCompleted: (listener) => subscribe(IpcEvent.AssistSuggestionCompleted, listener),
+    onSuggestionError: (listener) =>
+      subscribe(IpcEvent.AssistSuggestionError, (payload) =>
+        listener(payload.suggestionId, payload.message),
+      ),
+    onTtsAudio: (listener) => subscribe(IpcEvent.AssistTtsAudio, listener),
+    onReset: (listener) => subscribe(IpcEvent.AssistReset, () => listener()),
+  },
 };
 
 contextBridge.exposeInMainWorld('opencue', bridge);

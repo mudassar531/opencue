@@ -9,14 +9,14 @@
 
 ## Status
 
-🚧 Early development. Currently on **Phase 3 — Provider abstraction + cloud STT/LLM/TTS** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+🚧 Early development. Currently on **Phase 4 — Python sidecar + local models** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Repo, scaffolding & CI | ✅ shipped |
 | 1 | Overlay window & global hotkeys | ✅ shipped |
 | 2 | Audio capture pipeline (loopback + mic + VAD) | ✅ shipped |
-| 3 | Provider abstraction + cloud STT/LLM/TTS | ⏳ |
+| 3 | Provider abstraction + cloud STT/LLM/TTS | ✅ shipped |
 | 4 | Python sidecar + local models + model manager | ⏳ |
 | 5 | Screen context ("ask about your screen") | ⏳ |
 | 6 | Meeting integrations, sessions & export | ⏳ |
@@ -87,6 +87,27 @@ If `desktopCapturer.getSources()` fails (typically because the OS permission has
 
 - **Renderer** — `getUserMedia` / `getDisplayMedia`, `AudioContext`, `AnalyserNode` for the live level meter (~20 Hz), Silero VAD via `@ricky0123/vad-web`, ring buffer of recent PCM, segment dispatcher.
 - **Main** — `desktopCapturer` enumeration, one-shot `setDisplayMediaRequestHandler` so the renderer's `getDisplayMedia` call resolves to the chosen source with `audio: 'loopback'`, canonical `AudioCaptureState` plus event broadcast (`AudioCaptureStateChanged`, `AudioLevelTick`, `AudioSegmentReady`).
+
+## Connect a provider (Phase 3)
+
+Open opencue, scroll to **Providers & API keys**, pick a provider for each capability, paste your API key, hit **save**.
+
+| Capability | Cloud options shipped today |
+| --- | --- |
+| Speech-to-text | OpenAI Whisper, Deepgram, AssemblyAI |
+| Language model | OpenAI, Anthropic, Google Gemini, Groq |
+| Text-to-speech | OpenAI, ElevenLabs |
+
+Each saved key is encrypted at rest with Electron `safeStorage` (Keychain on macOS, DPAPI on Windows, libsecret on Linux). Keys never leave your machine except to the provider you chose.
+
+With keys configured:
+
+1. Start a capture in the **Audio capture** panel — every VAD-finalized segment is transcribed in the background.
+2. Hit `⌘⇧↵` (or `Ctrl+Shift+Enter`) to ask the assist hotkey for the next thing to say.
+3. Hit `⌘⇧R` for a meeting recap.
+4. Open the overlay's ask-bar (`⌘⇧/`) or use the **Ask** form in the main window to type a freeform question. Set the **TTS auto-play** toggle if you want the answer spoken.
+
+Local providers (faster-whisper / Parakeet / Piper / Kokoro / Ollama) land in Phase 4 behind the exact same interface, so switching cloud ↔ local is a single settings change.
 
 ## Build from source
 

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OpencueSettings, OverlayState } from '../../shared/ipc-contract';
 import { HotkeyAction } from '../../shared/settings-schema';
+import { AssistPanel } from './components/AssistPanel';
 import { AudioPanel } from './components/AudioPanel';
+import { ProviderSettings } from './components/ProviderSettings';
 
 interface AppInfo {
   version: string;
@@ -78,13 +80,14 @@ export function App(): JSX.Element {
     <div className="flex h-full flex-col items-center justify-start gap-6 overflow-y-auto bg-slate-950 p-8 text-slate-100">
       <header className="flex flex-col items-center gap-2">
         <div className="rounded-full bg-cue-500/20 px-4 py-1 text-xs font-medium uppercase tracking-widest text-cue-300">
-          phase 2 · audio capture
+          phase 3 · providers &amp; assist
         </div>
         <h1 className="text-4xl font-semibold tracking-tight">opencue</h1>
         <p className="max-w-xl text-center text-sm text-slate-400">
-          Open-source meeting copilot. Capture system / mic / per-window audio,
-          segment speech with Silero VAD, all on-device. Phase 3 plugs in cloud
-          and local STT/LLM/TTS providers.
+          Open-source meeting copilot. Capture audio on-device, transcribe and
+          assist with the provider you choose, and surface answers in the
+          always-on-top overlay. Bring your own keys today, run fully local in
+          Phase 4.
         </p>
       </header>
 
@@ -208,8 +211,12 @@ export function App(): JSX.Element {
 
       <AudioPanel />
 
+      <ProviderSettings />
+
+      <AssistPanel />
+
       <footer className="text-xs text-slate-500">
-        Next up — Phase 3: provider abstraction + cloud STT / LLM / TTS with your own keys.
+        Next up — Phase 4: Python sidecar + local models with download progress.
       </footer>
     </div>
   );

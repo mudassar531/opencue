@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  AssistStatus,
+  AssistSuggestion,
   HotkeyActionValue,
   OverlayState,
+  TranscriptEntry,
 } from '../../../shared/ipc-contract';
 import { HotkeyAction } from '../../../shared/settings-schema';
 
@@ -37,30 +40,66 @@ export function Overlay(): JSX.Element {
   const [recent, setRecent] = useState<RecentHotkey | null>(null);
   const [askInput, setAskInput] = useState('');
   const [askVisible, setAskVisible] = useState(false);
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [suggestions, setSuggestions] = useState<AssistSuggestion[]>([]);
+  const [assistStatus, setAssistStatus] = useState<AssistStatus>('idle');
 
   useEffect(() => {
     let cancelled = false;
-    window.opencue.overlay.getState().then((s) => {
-      if (!cancelled) setState(s);
-    });
+    void (async () => {
+      const [s, t, sug, st] = await Promise.all([
+        window.opencue.overlay.getState(),
+        window.opencue.assist.getTranscript(),
+        window.opencue.assist.getSuggestions(),
+        window.opencue.assist.getStatus(),
+      ]);
+      if (cancelled) return;
+      setState(s);
+      setTranscript(t);
+      setSuggestions(sug);
+      setAssistStatus(st.status);
+    })();
+
     const offState = window.opencue.overlay.onStateChanged((next) => setState(next));
     const offHotkey = window.opencue.hotkeys.onTriggered((action) => {
       setRecent({ action, at: Date.now() });
-      if (action === HotkeyAction.ToggleAskBar || action === HotkeyAction.Assist) {
+      if (action === HotkeyAction.ToggleAskBar) {
         setAskVisible(true);
         requestAnimationFrame(() => {
           document.getElementById('opencue-ask-input')?.focus();
         });
       }
-      if (action === HotkeyAction.Recap) {
-        // Phase 6 will populate the recap pane; for now just surface the action.
-        setAskVisible(false);
-      }
+    });
+    const offTranscript = window.opencue.assist.onTranscriptEntry((entry) =>
+      setTranscript((prev) => [...prev, entry].slice(-50)),
+    );
+    const offSuggestionStarted = window.opencue.assist.onSuggestionStarted((sug) =>
+      setSuggestions((prev) => [sug, ...prev].slice(0, 5)),
+    );
+    const offSuggestionDelta = window.opencue.assist.onSuggestionDelta(
+      (id, _delta, textSoFar) =>
+        setSuggestions((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, text: textSoFar, streaming: true } : s)),
+        ),
+    );
+    const offSuggestionDone = window.opencue.assist.onSuggestionCompleted((sug) =>
+      setSuggestions((prev) => prev.map((s) => (s.id === sug.id ? sug : s))),
+    );
+    const offStatus = window.opencue.assist.onStatusChanged((s) => setAssistStatus(s));
+    const offReset = window.opencue.assist.onReset(() => {
+      setTranscript([]);
+      setSuggestions([]);
     });
     return () => {
       cancelled = true;
       offState();
       offHotkey();
+      offTranscript();
+      offSuggestionStarted();
+      offSuggestionDelta();
+      offSuggestionDone();
+      offStatus();
+      offReset();
     };
   }, []);
 
@@ -133,15 +172,10 @@ export function Overlay(): JSX.Element {
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col gap-3 px-4 py-3">
-        <p className="text-sm text-slate-300">
-          Overlay ready. Phase 2 wires audio capture; Phase 3 wires AI
-          suggestions.
-        </p>
-
+      <div className="flex flex-1 flex-col gap-2 overflow-hidden px-3 py-2">
         {recent ? (
-          <div className="rounded-lg border border-cue-400/30 bg-cue-500/15 px-3 py-2 text-xs text-cue-100">
-            Hotkey: {ACTION_LABEL[recent.action]}
+          <div className="rounded-md border border-cue-400/30 bg-cue-500/15 px-2 py-1 text-[10px] text-cue-100">
+            {ACTION_LABEL[recent.action]}
           </div>
         ) : null}
 
@@ -150,7 +184,10 @@ export function Overlay(): JSX.Element {
             className="flex items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              // Phase 5 ships the real ask-bar wiring; for now we just clear.
+              const prompt = askInput.trim();
+              if (prompt.length > 0) {
+                void window.opencue.assist.run({ prompt, triggeredBy: 'manual' });
+              }
               setAskInput('');
               setAskVisible(false);
             }}
@@ -160,17 +197,67 @@ export function Overlay(): JSX.Element {
               value={askInput}
               onChange={(e) => setAskInput(e.target.value)}
               placeholder="Ask anything…"
-              className="flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm placeholder-slate-500 focus:border-cue-400 focus:outline-none"
+              className="flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs placeholder-slate-500 focus:border-cue-400 focus:outline-none"
               autoComplete="off"
             />
             <button
               type="button"
               onClick={() => setAskVisible(false)}
-              className="rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-white/10"
+              className="rounded-md px-2 py-1 text-[10px] text-slate-400 hover:bg-white/10"
             >
-              Esc
+              esc
             </button>
           </form>
+        ) : null}
+
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
+          <span>suggestions</span>
+          <span
+            className={
+              assistStatus === 'thinking' || assistStatus === 'speaking'
+                ? 'text-cue-300'
+                : assistStatus === 'error'
+                  ? 'text-rose-300'
+                  : 'text-slate-500'
+            }
+          >
+            {assistStatus}
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto rounded-md border border-white/5 bg-black/30 p-2 text-xs text-slate-200">
+          {suggestions.length === 0 ? (
+            <p className="text-slate-500">
+              Press <kbd className="font-mono text-cue-200">⌘⇧↵</kbd> to ask the copilot.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {suggestions.slice(0, 2).map((sug) => (
+                <div
+                  key={sug.id}
+                  className={`rounded border px-2 py-1.5 leading-snug ${
+                    sug.streaming
+                      ? 'border-cue-400/40 bg-cue-500/5 text-cue-50'
+                      : 'border-white/5 bg-white/[0.03] text-slate-100'
+                  }`}
+                >
+                  {sug.text || '…'}
+                  {sug.streaming ? <span className="ml-1 animate-pulse text-cue-300">▍</span> : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {transcript.length > 0 ? (
+          <div className="max-h-20 overflow-y-auto rounded-md border border-white/5 bg-black/20 p-1.5 text-[10px] leading-snug text-slate-400">
+            {transcript
+              .slice(-4)
+              .map((entry) => (
+                <div key={entry.id} className="truncate">
+                  · {entry.text}
+                </div>
+              ))}
+          </div>
         ) : null}
 
         {state ? <OverlayControls state={state} onOpacity={handleOpacity} /> : null}

@@ -16,6 +16,7 @@ import { app, BrowserWindow, globalShortcut, shell } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { HotkeyAction } from '../shared/settings-schema.js';
+import { getAssistOrchestrator } from './assist/assist-orchestrator.js';
 import { getHotkeyManager } from './hotkeys/hotkey-manager.js';
 import { broadcastEvent, registerIpcHandlers, wireEventBroadcasts } from './ipc.js';
 import { getOverlayManager } from './overlay/overlay-window.js';
@@ -93,10 +94,20 @@ function wireHotkeyActions(): void {
         break;
       }
       case HotkeyAction.Assist:
+        overlay.show();
+        broadcastEvent(IpcEvent.HotkeyTriggered, { action });
+        void getAssistOrchestrator()
+          .runAssist({ triggeredBy: 'hotkey' })
+          .catch(() => undefined);
+        break;
       case HotkeyAction.Recap:
+        overlay.show();
+        broadcastEvent(IpcEvent.HotkeyTriggered, { action });
+        void getAssistOrchestrator()
+          .runAssist({ triggeredBy: 'hotkey', isRecap: true })
+          .catch(() => undefined);
+        break;
       case HotkeyAction.ToggleAskBar:
-        // These are pure renderer-facing actions; the broadcast event
-        // (HotkeyTriggered) is what the overlay UI listens for.
         overlay.show();
         broadcastEvent(IpcEvent.HotkeyTriggered, { action });
         break;

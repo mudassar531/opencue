@@ -23,6 +23,7 @@ import {
   type HotkeyMap,
   type OpencueSettings,
   type OverlaySettings,
+  type ProviderSelection,
   SETTINGS_SCHEMA_VERSION,
   clampOpacity,
   isPlausibleAccelerator,
@@ -73,17 +74,34 @@ function mergeHotkeys(current: HotkeyMap, patch: Partial<HotkeyMap>): HotkeyMap 
  * `case` here that transforms the previous-version object into the new one.
  */
 function migrate(raw: unknown): OpencueSettings {
-  if (!raw || typeof raw !== 'object') return { ...DEFAULT_SETTINGS };
+  if (!raw || typeof raw !== 'object') return structuredClone(DEFAULT_SETTINGS);
   const candidate = raw as Partial<OpencueSettings> & { schemaVersion?: number };
   const version = candidate.schemaVersion ?? 0;
-  // No prior versions yet — accept the current shape or fall back to defaults.
+
+  // v1 → v2: introduce providers section.
+  if (version === 1) {
+    return {
+      schemaVersion: SETTINGS_SCHEMA_VERSION,
+      overlay: { ...DEFAULT_OVERLAY_SETTINGS, ...candidate.overlay },
+      hotkeys: { ...DEFAULT_HOTKEYS, ...candidate.hotkeys },
+      providers: structuredClone(DEFAULT_SETTINGS.providers),
+    };
+  }
+
   if (version !== SETTINGS_SCHEMA_VERSION) {
-    return { ...DEFAULT_SETTINGS };
+    return structuredClone(DEFAULT_SETTINGS);
   }
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     overlay: { ...DEFAULT_OVERLAY_SETTINGS, ...candidate.overlay },
     hotkeys: { ...DEFAULT_HOTKEYS, ...candidate.hotkeys },
+    providers: {
+      ...structuredClone(DEFAULT_SETTINGS.providers),
+      ...(candidate.providers ?? {}),
+      stt: { ...DEFAULT_SETTINGS.providers.stt, ...(candidate.providers?.stt ?? {}) },
+      llm: { ...DEFAULT_SETTINGS.providers.llm, ...(candidate.providers?.llm ?? {}) },
+      tts: { ...DEFAULT_SETTINGS.providers.tts, ...(candidate.providers?.tts ?? {}) },
+    },
   };
 }
 
@@ -137,6 +155,28 @@ export class SettingsStore {
     return { ...hotkeys };
   }
 
+  getProviders(): ProviderSelection {
+    return structuredClone(this.current.providers);
+  }
+
+  updateProviders(patch: DeepPartial<ProviderSelection>): ProviderSelection {
+    const previous = this.current;
+    const providers: ProviderSelection = {
+      ...previous.providers,
+      assistSystemPrompt:
+        typeof patch.assistSystemPrompt === 'string'
+          ? patch.assistSystemPrompt
+          : previous.providers.assistSystemPrompt,
+      stt: { ...previous.providers.stt, ...(patch.stt ?? {}) },
+      llm: clampLlm({ ...previous.providers.llm, ...(patch.llm ?? {}) }),
+      tts: { ...previous.providers.tts, ...(patch.tts ?? {}) },
+    };
+    this.current = { ...previous, providers };
+    this.store.set('providers', providers);
+    this.emitter.emit('changed', this.current, previous);
+    return structuredClone(providers);
+  }
+
   reset(): OpencueSettings {
     const previous = this.current;
     this.current = structuredClone(DEFAULT_SETTINGS);
@@ -155,7 +195,21 @@ export class SettingsStore {
     this.store.set('schemaVersion', settings.schemaVersion);
     this.store.set('overlay', settings.overlay);
     this.store.set('hotkeys', settings.hotkeys);
+    this.store.set('providers', settings.providers);
   }
+}
+
+/** Deep-partial used for the providers patch shape (one-level deep). */
+type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends object ? Partial<T[K]> : T[K];
+};
+
+function clampLlm(llm: ProviderSelection['llm']): ProviderSelection['llm'] {
+  return {
+    ...llm,
+    temperature: Math.max(0, Math.min(2, llm.temperature)),
+    maxOutputTokens: Math.max(16, Math.min(8192, Math.floor(llm.maxOutputTokens))),
+  };
 }
 
 /**

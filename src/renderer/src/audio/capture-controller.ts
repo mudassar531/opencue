@@ -177,24 +177,37 @@ export class CaptureController {
       onMisfire: () => {
         this.speechActive = false;
       },
-      onSegment: ({ samples, durationMs }) => {
+      onSegment: ({ samples, durationMs, startedAt }) => {
         this.speechActive = false;
         if (this.ringBuffer) {
           this.ringBuffer.write(samples);
         }
         this.segmentCounter += 1;
         const segmentRms = rms(samples);
+        const segmentId = this.segmentCounter;
+        // 1) Lightweight metadata for the audio orchestrator UI.
         void window.opencue.audio
           .reportSegment({
-            id: this.segmentCounter,
-            startedAt: Date.now() - durationMs,
+            id: segmentId,
+            startedAt,
             durationMs,
             sampleCount: samples.length,
             sampleRate: 16000,
             rms: segmentRms,
           })
           .catch(() => undefined);
-        this.callbacks.onSegment?.(this.segmentCounter, durationMs, segmentRms);
+        // 2) Full PCM for transcription. Skip if no STT key has ever been
+        // configured to avoid spamming providers with empty calls.
+        const samplesBase64 = float32ToBase64(samples);
+        void window.opencue.assist
+          .submitSegment({
+            segmentId,
+            startedAt,
+            sampleRate: 16000,
+            samplesBase64,
+          })
+          .catch(() => undefined);
+        this.callbacks.onSegment?.(segmentId, durationMs, segmentRms);
       },
       onError: (err) => {
         // VAD errors after start are surfaced but don't tear the session down —
@@ -210,4 +223,18 @@ export class CaptureController {
     this.state = next;
     this.callbacks.onState?.(next);
   }
+}
+
+/**
+ * Convert a Float32Array to a base64-encoded string of its raw bytes so it
+ * can be shipped across IPC and re-wrapped in main with `new Float32Array(buf)`.
+ */
+function float32ToBase64(samples: Float32Array): string {
+  const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return btoa(binary);
 }

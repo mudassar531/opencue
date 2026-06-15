@@ -188,6 +188,48 @@ The VAD model (Silero v5) and onnxruntime-web WASM files are copied into the ren
 
 Raw PCM never crosses the IPC bridge in Phase 2 — only segment **metadata** (id, timestamps, sample count, RMS) is shipped. Bulk audio stays in-renderer for the future STT consumer (Phase 3) to read directly via a shared buffer or to push to a cloud streaming endpoint.
 
+## Providers & Assist (Phase 3)
+
+Once an STT segment is ready in the renderer, it is shipped to the main process and run through the user's chosen provider stack:
+
+```text
+VAD segment (renderer) ──base64 PCM──► AssistOrchestrator (main)
+                                            │
+                                            ▼
+                                       STT provider
+                                            │  text
+                                            ▼
+                                   TranscriptBuffer
+                                            │
+                                            ▼  (on Assist hotkey / Ask form)
+                                       LLM provider (streaming)
+                                            │  deltas
+                                            ▼
+                          IPC events ──► overlay + main UI
+                                            │  done
+                                            ▼ (optional)
+                                       TTS provider
+                                            │  audio bytes
+                                            ▼
+                          IPC event  ──► renderer plays via <audio>
+```
+
+Each capability sits behind a small interface — `SttProvider`, `LlmProvider`, `TtsProvider` (see `src/shared/provider-types.ts`). Cloud providers shipped in this phase:
+
+| Capability | Providers |
+| --- | --- |
+| STT | OpenAI Whisper, Deepgram, AssemblyAI |
+| LLM | OpenAI, Anthropic, Google Gemini, Groq |
+| TTS | OpenAI, ElevenLabs |
+
+The `ProviderRouter` (`src/main/providers/router.ts`) constructs the active provider per call by reading the user's `ProviderSelection` from settings — switching providers at runtime is free, no restart needed. Local STT / LLM / TTS lands in Phase 4 behind the same interfaces (faster-whisper / Parakeet, Piper / Kokoro, Ollama).
+
+### Where keys live
+
+API keys are entered in the **Providers & API keys** panel and stored encrypted with Electron `safeStorage` (Keychain / DPAPI / libsecret). The renderer never receives the key text back — only a `{ scope.providerId: hasKey }` presence map for the lock indicator. If `safeStorage` isn't available on the host, opencue refuses to save the key rather than fall back to plaintext.
+
+`.env.example` lists the same variables for developer convenience, but real `.env` is git-ignored and the runtime never reads it.
+
 ## Provider abstraction (planned — Phase 3)
 
 ```text

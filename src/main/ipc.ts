@@ -6,6 +6,7 @@
  */
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { Buffer } from 'node:buffer';
 import {
   IpcChannel,
   IpcEvent,
@@ -16,10 +17,17 @@ import {
   type IpcResponse,
 } from '../shared/ipc-contract.js';
 import { type HotkeyActionValue } from '../shared/settings-schema.js';
+import { getAssistOrchestrator } from './assist/assist-orchestrator.js';
 import { getAudioOrchestrator } from './audio/audio-orchestrator.js';
 import { getHotkeyManager } from './hotkeys/hotkey-manager.js';
 import { getOverlayManager, type OverlayEvent } from './overlay/overlay-window.js';
-import { getSettingsStore } from './settings/store.js';
+import {
+  deleteApiKey,
+  getApiKeyPresenceMap,
+  setApiKey,
+} from './providers/secret-keys.js';
+import { getProviderRouter } from './providers/router.js';
+import { getSecretStore, getSettingsStore } from './settings/store.js';
 
 type Handler<C extends IpcChannelValue> = (
   event: IpcMainInvokeEvent,
@@ -187,6 +195,68 @@ export function registerIpcHandlers(): void {
   });
 
   handle(IpcChannel.AudioGetState, () => getAudioOrchestrator().getState());
+
+  /* ---------------- Providers + Assist (Phase 3) ---------------- */
+  handle(IpcChannel.ProvidersGetCapabilities, () => getProviderRouter().listCapabilities());
+
+  handle(IpcChannel.ProvidersGetKeyPresence, () => ({
+    presence: getApiKeyPresenceMap(),
+    safeStorageAvailable: getSecretStore().isAvailable(),
+  }));
+
+  handle(IpcChannel.ProvidersSetApiKey, (_event, { scope, providerId, apiKey }) => {
+    const ok = setApiKey(scope, providerId, apiKey);
+    broadcastEvent(IpcEvent.SettingsChanged, getSettingsStore().get());
+    return { ok, safeStorageAvailable: getSecretStore().isAvailable() };
+  });
+
+  handle(IpcChannel.ProvidersDeleteApiKey, (_event, { scope, providerId }) => {
+    deleteApiKey(scope, providerId);
+    broadcastEvent(IpcEvent.SettingsChanged, getSettingsStore().get());
+    return { ok: true as const };
+  });
+
+  handle(IpcChannel.ProvidersUpdateSelection, (_event, patch) => {
+    const next = getSettingsStore().updateProviders(patch);
+    broadcastEvent(IpcEvent.SettingsChanged, getSettingsStore().get());
+    return next;
+  });
+
+  handle(IpcChannel.AssistGetTranscript, () => Array.from(getAssistOrchestrator().getTranscript()));
+  handle(IpcChannel.AssistGetSuggestions, () =>
+    Array.from(getAssistOrchestrator().getSuggestions()),
+  );
+  handle(IpcChannel.AssistGetStatus, () => ({
+    status: getAssistOrchestrator().getStatus(),
+    error: getAssistOrchestrator().getLastError(),
+  }));
+
+  handle(IpcChannel.AssistSubmitSegment, async (_event, payload) => {
+    const buf = Buffer.from(payload.samplesBase64, 'base64');
+    // Re-wrap as Float32Array (4 bytes per sample).
+    const samples = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+    const entry = await getAssistOrchestrator().submitSegmentAudio({
+      segmentId: payload.segmentId,
+      startedAt: payload.startedAt,
+      sampleRate: payload.sampleRate,
+      samples,
+      ...(payload.languageHint ? { languageHint: payload.languageHint } : {}),
+    });
+    return { transcribed: entry !== null };
+  });
+
+  handle(IpcChannel.AssistRun, async (_event, args) => {
+    const suggestion = await getAssistOrchestrator().runAssist(args);
+    return { suggestionId: suggestion?.id ?? null };
+  });
+  handle(IpcChannel.AssistCancel, () => {
+    getAssistOrchestrator().cancelInFlight();
+    return { ok: true as const };
+  });
+  handle(IpcChannel.AssistReset, () => {
+    getAssistOrchestrator().reset();
+    return { ok: true as const };
+  });
 }
 
 /**
@@ -218,5 +288,55 @@ export function wireEventBroadcasts(): void {
   });
   audio.on('segment', (segment) => {
     broadcastEvent(IpcEvent.AudioSegmentReady, segment);
+  });
+
+  const assist = getAssistOrchestrator();
+  assist.on('event', (event) => {
+    switch (event.type) {
+      case 'status-changed':
+        broadcastEvent(IpcEvent.AssistStatusChanged, {
+          status: event.status,
+          error: event.error,
+        });
+        break;
+      case 'transcript-entry':
+        broadcastEvent(IpcEvent.AssistTranscriptEntry, event.entry);
+        break;
+      case 'transcript-error':
+        broadcastEvent(IpcEvent.AssistTranscriptError, {
+          segmentId: event.segmentId,
+          message: event.message,
+        });
+        break;
+      case 'suggestion-started':
+        broadcastEvent(IpcEvent.AssistSuggestionStarted, event.suggestion);
+        break;
+      case 'suggestion-delta':
+        broadcastEvent(IpcEvent.AssistSuggestionDelta, {
+          suggestionId: event.suggestionId,
+          delta: event.delta,
+          textSoFar: event.textSoFar,
+        });
+        break;
+      case 'suggestion-completed':
+        broadcastEvent(IpcEvent.AssistSuggestionCompleted, event.suggestion);
+        break;
+      case 'suggestion-error':
+        broadcastEvent(IpcEvent.AssistSuggestionError, {
+          suggestionId: event.suggestionId,
+          message: event.message,
+        });
+        break;
+      case 'tts-audio':
+        broadcastEvent(IpcEvent.AssistTtsAudio, {
+          suggestionId: event.suggestionId,
+          mimeType: event.mimeType,
+          audioBase64: Buffer.from(event.audio).toString('base64'),
+        });
+        break;
+      case 'reset':
+        broadcastEvent(IpcEvent.AssistReset, {});
+        break;
+    }
   });
 }

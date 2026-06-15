@@ -19,6 +19,15 @@ import type {
   AudioSourceList,
 } from './audio-types.js';
 import type {
+  AssistStatus,
+  AssistSuggestion,
+  LlmProviderIdValue,
+  ProviderSelection,
+  SttProviderIdValue,
+  TranscriptEntry,
+  TtsProviderIdValue,
+} from './provider-types.js';
+import type {
   HotkeyActionValue,
   HotkeyMap,
   OpencueSettings,
@@ -27,6 +36,8 @@ import type {
 } from './settings-schema.js';
 
 export type {
+  AssistStatus,
+  AssistSuggestion,
   AudioCaptureState,
   AudioLevelTick,
   AudioSegment,
@@ -34,10 +45,30 @@ export type {
   AudioSourceList,
   HotkeyActionValue,
   HotkeyMap,
+  LlmProviderIdValue,
   OpencueSettings,
   OverlayPositionValue,
   OverlaySettings,
+  ProviderSelection,
+  SttProviderIdValue,
+  TranscriptEntry,
+  TtsProviderIdValue,
 };
+
+/** Capabilities surfaced by the provider router for the settings UI. */
+export interface ProviderCapabilities {
+  stt: { id: SttProviderIdValue; displayName: string; models: readonly string[] }[];
+  llm: { id: LlmProviderIdValue; displayName: string; models: readonly string[] }[];
+  tts: {
+    id: TtsProviderIdValue;
+    displayName: string;
+    models: readonly string[];
+    voices: readonly string[];
+  }[];
+}
+
+/** Renderer-friendly view of which API keys have been entered. */
+export type ApiKeyPresence = Record<string, boolean>;
 
 /** Public, serializable state of the overlay window. */
 export interface OverlayState {
@@ -97,6 +128,20 @@ export const IpcChannel = {
   AudioReportSegment: 'audio:report-segment',
   AudioReportError: 'audio:report-error',
   AudioGetState: 'audio:get-state',
+
+  // Providers + Assist (Phase 3).
+  ProvidersGetCapabilities: 'providers:get-capabilities',
+  ProvidersGetKeyPresence: 'providers:get-key-presence',
+  ProvidersSetApiKey: 'providers:set-api-key',
+  ProvidersDeleteApiKey: 'providers:delete-api-key',
+  ProvidersUpdateSelection: 'providers:update-selection',
+  AssistGetTranscript: 'assist:get-transcript',
+  AssistGetSuggestions: 'assist:get-suggestions',
+  AssistGetStatus: 'assist:get-status',
+  AssistSubmitSegment: 'assist:submit-segment',
+  AssistRun: 'assist:run',
+  AssistCancel: 'assist:cancel',
+  AssistReset: 'assist:reset',
 } as const;
 
 export type IpcChannelValue = (typeof IpcChannel)[keyof typeof IpcChannel];
@@ -220,6 +265,63 @@ export interface IpcContract {
     request: void;
     response: AudioCaptureState;
   };
+
+  /* ---------- Providers + Assist (Phase 3) ---------- */
+  [IpcChannel.ProvidersGetCapabilities]: {
+    request: void;
+    response: ProviderCapabilities;
+  };
+  [IpcChannel.ProvidersGetKeyPresence]: {
+    request: void;
+    response: { presence: ApiKeyPresence; safeStorageAvailable: boolean };
+  };
+  [IpcChannel.ProvidersSetApiKey]: {
+    request: { scope: 'stt' | 'llm' | 'tts'; providerId: string; apiKey: string };
+    response: { ok: boolean; safeStorageAvailable: boolean };
+  };
+  [IpcChannel.ProvidersDeleteApiKey]: {
+    request: { scope: 'stt' | 'llm' | 'tts'; providerId: string };
+    response: { ok: true };
+  };
+  [IpcChannel.ProvidersUpdateSelection]: {
+    request: Partial<ProviderSelection>;
+    response: ProviderSelection;
+  };
+  [IpcChannel.AssistGetTranscript]: {
+    request: void;
+    response: TranscriptEntry[];
+  };
+  [IpcChannel.AssistGetSuggestions]: {
+    request: void;
+    response: AssistSuggestion[];
+  };
+  [IpcChannel.AssistGetStatus]: {
+    request: void;
+    response: { status: AssistStatus; error: string | null };
+  };
+  [IpcChannel.AssistSubmitSegment]: {
+    /** Renderer sends Float32 PCM as a base64-encoded Uint8Array view. */
+    request: {
+      segmentId: number;
+      startedAt: number;
+      sampleRate: number;
+      samplesBase64: string;
+      languageHint?: string;
+    };
+    response: { transcribed: boolean };
+  };
+  [IpcChannel.AssistRun]: {
+    request: { prompt?: string; isRecap?: boolean; triggeredBy: 'hotkey' | 'manual' | 'auto' };
+    response: { suggestionId: number | null };
+  };
+  [IpcChannel.AssistCancel]: {
+    request: void;
+    response: { ok: true };
+  };
+  [IpcChannel.AssistReset]: {
+    request: void;
+    response: { ok: true };
+  };
 }
 
 export type IpcRequest<C extends IpcChannelValue> = IpcContract[C]['request'];
@@ -234,6 +336,15 @@ export const IpcEvent = {
   AudioCaptureStateChanged: 'event:audio-capture-state-changed',
   AudioLevelTick: 'event:audio-level-tick',
   AudioSegmentReady: 'event:audio-segment-ready',
+  AssistStatusChanged: 'event:assist-status-changed',
+  AssistTranscriptEntry: 'event:assist-transcript-entry',
+  AssistTranscriptError: 'event:assist-transcript-error',
+  AssistSuggestionStarted: 'event:assist-suggestion-started',
+  AssistSuggestionDelta: 'event:assist-suggestion-delta',
+  AssistSuggestionCompleted: 'event:assist-suggestion-completed',
+  AssistSuggestionError: 'event:assist-suggestion-error',
+  AssistTtsAudio: 'event:assist-tts-audio',
+  AssistReset: 'event:assist-reset',
 } as const;
 
 export type IpcEventValue = (typeof IpcEvent)[keyof typeof IpcEvent];
@@ -245,6 +356,16 @@ export interface IpcEventPayloads {
   [IpcEvent.AudioCaptureStateChanged]: AudioCaptureState;
   [IpcEvent.AudioLevelTick]: AudioLevelTick;
   [IpcEvent.AudioSegmentReady]: AudioSegment;
+  [IpcEvent.AssistStatusChanged]: { status: AssistStatus; error: string | null };
+  [IpcEvent.AssistTranscriptEntry]: TranscriptEntry;
+  [IpcEvent.AssistTranscriptError]: { segmentId: number; message: string };
+  [IpcEvent.AssistSuggestionStarted]: AssistSuggestion;
+  [IpcEvent.AssistSuggestionDelta]: { suggestionId: number; delta: string; textSoFar: string };
+  [IpcEvent.AssistSuggestionCompleted]: AssistSuggestion;
+  [IpcEvent.AssistSuggestionError]: { suggestionId: number; message: string };
+  /** Audio is base64-encoded so it survives the IPC structured clone path. */
+  [IpcEvent.AssistTtsAudio]: { suggestionId: number; mimeType: string; audioBase64: string };
+  [IpcEvent.AssistReset]: Record<string, never>;
 }
 
 /* ---------------- Renderer-facing bridge ---------------- */
@@ -321,5 +442,55 @@ export interface OpencueBridge {
     onStateChanged(listener: (state: AudioCaptureState) => void): () => void;
     onLevelTick(listener: (tick: AudioLevelTick) => void): () => void;
     onSegmentReady(listener: (segment: AudioSegment) => void): () => void;
+  };
+  providers: {
+    getCapabilities(): Promise<IpcResponse<typeof IpcChannel.ProvidersGetCapabilities>>;
+    getKeyPresence(): Promise<IpcResponse<typeof IpcChannel.ProvidersGetKeyPresence>>;
+    setApiKey(
+      scope: 'stt' | 'llm' | 'tts',
+      providerId: string,
+      apiKey: string,
+    ): Promise<IpcResponse<typeof IpcChannel.ProvidersSetApiKey>>;
+    deleteApiKey(
+      scope: 'stt' | 'llm' | 'tts',
+      providerId: string,
+    ): Promise<IpcResponse<typeof IpcChannel.ProvidersDeleteApiKey>>;
+    updateSelection(
+      patch: Partial<ProviderSelection>,
+    ): Promise<IpcResponse<typeof IpcChannel.ProvidersUpdateSelection>>;
+  };
+  assist: {
+    getTranscript(): Promise<IpcResponse<typeof IpcChannel.AssistGetTranscript>>;
+    getSuggestions(): Promise<IpcResponse<typeof IpcChannel.AssistGetSuggestions>>;
+    getStatus(): Promise<IpcResponse<typeof IpcChannel.AssistGetStatus>>;
+    /** Renderer submits raw Float32 PCM as a base64 string (Uint8Array view). */
+    submitSegment(args: {
+      segmentId: number;
+      startedAt: number;
+      sampleRate: number;
+      samplesBase64: string;
+      languageHint?: string;
+    }): Promise<IpcResponse<typeof IpcChannel.AssistSubmitSegment>>;
+    run(args: {
+      prompt?: string;
+      isRecap?: boolean;
+      triggeredBy: 'hotkey' | 'manual' | 'auto';
+    }): Promise<IpcResponse<typeof IpcChannel.AssistRun>>;
+    cancel(): Promise<IpcResponse<typeof IpcChannel.AssistCancel>>;
+    reset(): Promise<IpcResponse<typeof IpcChannel.AssistReset>>;
+    onStatusChanged(
+      listener: (status: AssistStatus, error: string | null) => void,
+    ): () => void;
+    onTranscriptEntry(listener: (entry: TranscriptEntry) => void): () => void;
+    onSuggestionStarted(listener: (suggestion: AssistSuggestion) => void): () => void;
+    onSuggestionDelta(
+      listener: (suggestionId: number, delta: string, textSoFar: string) => void,
+    ): () => void;
+    onSuggestionCompleted(listener: (suggestion: AssistSuggestion) => void): () => void;
+    onSuggestionError(listener: (suggestionId: number, message: string) => void): () => void;
+    onTtsAudio(
+      listener: (args: { suggestionId: number; mimeType: string; audioBase64: string }) => void,
+    ): () => void;
+    onReset(listener: () => void): () => void;
   };
 }
