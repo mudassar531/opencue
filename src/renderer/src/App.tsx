@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OpencueSettings, OverlayState } from '../../shared/ipc-contract';
 import { HotkeyAction } from '../../shared/settings-schema';
+import { AudioPanel } from './components/AudioPanel';
 
 interface AppInfo {
   version: string;
@@ -77,13 +78,13 @@ export function App(): JSX.Element {
     <div className="flex h-full flex-col items-center justify-start gap-6 overflow-y-auto bg-slate-950 p-8 text-slate-100">
       <header className="flex flex-col items-center gap-2">
         <div className="rounded-full bg-cue-500/20 px-4 py-1 text-xs font-medium uppercase tracking-widest text-cue-300">
-          phase 1 · overlay & hotkeys
+          phase 2 · audio capture
         </div>
         <h1 className="text-4xl font-semibold tracking-tight">opencue</h1>
         <p className="max-w-xl text-center text-sm text-slate-400">
-          Open-source meeting copilot. The overlay floats above every other
-          window and is excluded from screen sharing. Phase 2 wires audio
-          capture; Phase 3 wires AI suggestions.
+          Open-source meeting copilot. Capture system / mic / per-window audio,
+          segment speech with Silero VAD, all on-device. Phase 3 plugs in cloud
+          and local STT/LLM/TTS providers.
         </p>
       </header>
 
@@ -205,8 +206,10 @@ export function App(): JSX.Element {
         </p>
       </section>
 
+      <AudioPanel />
+
       <footer className="text-xs text-slate-500">
-        Next up — Phase 2: system / mic / loopback audio capture + Silero VAD.
+        Next up — Phase 3: provider abstraction + cloud STT / LLM / TTS with your own keys.
       </footer>
     </div>
   );

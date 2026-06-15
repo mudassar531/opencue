@@ -12,6 +12,13 @@
 /* ---------------- Shared payload types (used by both ends) ---------------- */
 
 import type {
+  AudioCaptureState,
+  AudioLevelTick,
+  AudioSegment,
+  AudioSource,
+  AudioSourceList,
+} from './audio-types.js';
+import type {
   HotkeyActionValue,
   HotkeyMap,
   OpencueSettings,
@@ -20,6 +27,11 @@ import type {
 } from './settings-schema.js';
 
 export type {
+  AudioCaptureState,
+  AudioLevelTick,
+  AudioSegment,
+  AudioSource,
+  AudioSourceList,
   HotkeyActionValue,
   HotkeyMap,
   OpencueSettings,
@@ -75,6 +87,16 @@ export const IpcChannel = {
 
   // Hotkeys.
   HotkeysGetSnapshot: 'hotkeys:get-snapshot',
+
+  // Audio capture (Phase 2).
+  AudioListSources: 'audio:list-sources',
+  AudioPrepareCapture: 'audio:prepare-capture',
+  AudioCaptureStarted: 'audio:capture-started',
+  AudioCaptureStopped: 'audio:capture-stopped',
+  AudioReportLevel: 'audio:report-level',
+  AudioReportSegment: 'audio:report-segment',
+  AudioReportError: 'audio:report-error',
+  AudioGetState: 'audio:get-state',
 } as const;
 
 export type IpcChannelValue = (typeof IpcChannel)[keyof typeof IpcChannel];
@@ -158,6 +180,46 @@ export interface IpcContract {
     request: void;
     response: { hotkeys: HotkeyMap; registration: HotkeyRegistrationResult[] };
   };
+
+  /* ---------- Audio (Phase 2) ---------- */
+  [IpcChannel.AudioListSources]: {
+    request: void;
+    response: AudioSourceList;
+  };
+  [IpcChannel.AudioPrepareCapture]: {
+    /**
+     * Tell main which source the user picked. For screen / window sources this
+     * also installs the one-shot `setDisplayMediaRequestHandler` callback so
+     * the renderer can immediately call `navigator.mediaDevices.getDisplayMedia`
+     * and receive the chosen source.
+     */
+    request: { source: AudioSource };
+    response: { ok: true } | { ok: false; error: string };
+  };
+  [IpcChannel.AudioCaptureStarted]: {
+    request: { source: AudioSource; sampleRate: number };
+    response: AudioCaptureState;
+  };
+  [IpcChannel.AudioCaptureStopped]: {
+    request: void;
+    response: AudioCaptureState;
+  };
+  [IpcChannel.AudioReportLevel]: {
+    request: AudioLevelTick;
+    response: void;
+  };
+  [IpcChannel.AudioReportSegment]: {
+    request: AudioSegment;
+    response: { acknowledged: true };
+  };
+  [IpcChannel.AudioReportError]: {
+    request: { message: string };
+    response: AudioCaptureState;
+  };
+  [IpcChannel.AudioGetState]: {
+    request: void;
+    response: AudioCaptureState;
+  };
 }
 
 export type IpcRequest<C extends IpcChannelValue> = IpcContract[C]['request'];
@@ -169,6 +231,9 @@ export const IpcEvent = {
   HotkeyTriggered: 'event:hotkey-triggered',
   OverlayStateChanged: 'event:overlay-state-changed',
   SettingsChanged: 'event:settings-changed',
+  AudioCaptureStateChanged: 'event:audio-capture-state-changed',
+  AudioLevelTick: 'event:audio-level-tick',
+  AudioSegmentReady: 'event:audio-segment-ready',
 } as const;
 
 export type IpcEventValue = (typeof IpcEvent)[keyof typeof IpcEvent];
@@ -177,6 +242,9 @@ export interface IpcEventPayloads {
   [IpcEvent.HotkeyTriggered]: { action: HotkeyActionValue };
   [IpcEvent.OverlayStateChanged]: OverlayState;
   [IpcEvent.SettingsChanged]: OpencueSettings;
+  [IpcEvent.AudioCaptureStateChanged]: AudioCaptureState;
+  [IpcEvent.AudioLevelTick]: AudioLevelTick;
+  [IpcEvent.AudioSegmentReady]: AudioSegment;
 }
 
 /* ---------------- Renderer-facing bridge ---------------- */
@@ -233,5 +301,25 @@ export interface OpencueBridge {
   hotkeys: {
     getSnapshot(): Promise<IpcResponse<typeof IpcChannel.HotkeysGetSnapshot>>;
     onTriggered(listener: (action: HotkeyActionValue) => void): () => void;
+  };
+  audio: {
+    listSources(): Promise<IpcResponse<typeof IpcChannel.AudioListSources>>;
+    prepareCapture(
+      source: AudioSource,
+    ): Promise<IpcResponse<typeof IpcChannel.AudioPrepareCapture>>;
+    captureStarted(
+      source: AudioSource,
+      sampleRate: number,
+    ): Promise<IpcResponse<typeof IpcChannel.AudioCaptureStarted>>;
+    captureStopped(): Promise<IpcResponse<typeof IpcChannel.AudioCaptureStopped>>;
+    reportLevel(tick: AudioLevelTick): Promise<void>;
+    reportSegment(
+      segment: AudioSegment,
+    ): Promise<IpcResponse<typeof IpcChannel.AudioReportSegment>>;
+    reportError(message: string): Promise<IpcResponse<typeof IpcChannel.AudioReportError>>;
+    getState(): Promise<IpcResponse<typeof IpcChannel.AudioGetState>>;
+    onStateChanged(listener: (state: AudioCaptureState) => void): () => void;
+    onLevelTick(listener: (tick: AudioLevelTick) => void): () => void;
+    onSegmentReady(listener: (segment: AudioSegment) => void): () => void;
   };
 }

@@ -152,6 +152,42 @@ Per-OS implementations:
 
 If a platform cannot do loopback (or the user denies permission), opencue falls back to mic + single-tab capture and tells the user clearly. The picker UI lets the user select source(s) at runtime.
 
+## Audio pipeline (Phase 2)
+
+```text
+SystemAudioCapture (per-OS adapter — renderer)
+        │
+        ▼
+   raw PCM frames ──► Silero VAD (onnxruntime-web)
+                        │
+                        ▼
+                   speech segments ──► ring buffer
+                        │                  │
+                        ▼                  │
+                  level meter (20 Hz)      │
+                        │                  ▼
+                        └─► IPC ─► main process orchestrator
+                                       │   │
+                                       ▼   ▼
+                               state events / segment events
+                               (broadcast to every renderer)
+```
+
+Owners:
+
+- **Renderer (`src/renderer/src/audio/`)** acquires the `MediaStream` via `acquireAudioStream` (`getUserMedia` for mics, `getDisplayMedia` for screen / window). `CaptureController` then drives the live AnalyserNode loop (RMS / peak / dBFS at ~20 Hz) and Silero VAD (`createSileroVad`). Pure helpers (`RingBuffer`, `rms`, `peak`, `toDbFs`, `dbFsToMeter`) are covered by unit tests.
+- **Main (`src/main/audio/audio-orchestrator.ts`)** enumerates desktop sources via `desktopCapturer`, installs the one-shot `setDisplayMediaRequestHandler` that returns the chosen source with `audio: 'loopback'`, tracks the canonical `AudioCaptureState` (`idle`/`requesting`/`active`/`error`), and broadcasts state, level ticks, and segment metadata over the typed IPC events.
+
+Per-OS implementations:
+
+- **Windows** — Chromium's WASAPI loopback path inside `getDisplayMedia` when a screen / window source is supplied via the display-media handler.
+- **macOS** — ScreenCaptureKit (macOS 13+) under the same Chromium API. Requires Screen & System Audio Recording permission; `systemPreferences.getMediaAccessStatus('screen')` is surfaced over IPC so the picker can show a permission CTA instead of a generic error.
+- **Linux** — Native loopback through `desktopCapturer` is not reliable, so `loopbackSupported('linux')` returns `false`. The UI hides screen / window options and tells the user to pick a microphone or a *Monitor of …* PulseAudio / PipeWire source.
+
+The VAD model (Silero v5) and onnxruntime-web WASM files are copied into the renderer build under `/vad/` by `vite-plugin-static-copy` (see `electron.vite.config.ts`).
+
+Raw PCM never crosses the IPC bridge in Phase 2 — only segment **metadata** (id, timestamps, sample count, RMS) is shipped. Bulk audio stays in-renderer for the future STT consumer (Phase 3) to read directly via a shared buffer or to push to a cloud streaming endpoint.
+
 ## Provider abstraction (planned — Phase 3)
 
 ```text
@@ -196,6 +232,9 @@ Models are not bundled. The main-process **model manager** downloads them on dem
 │   ├── main/               # Electron main process (privileged)
 │   │   ├── index.ts
 │   │   ├── ipc.ts
+│   │   ├── audio/
+│   │   │   ├── audio-orchestrator.ts
+│   │   │   └── audio-orchestrator.test.ts
 │   │   ├── overlay/
 │   │   │   ├── overlay-window.ts
 │   │   │   └── overlay-window.test.ts
@@ -212,14 +251,25 @@ Models are not bundled. The main-process **model manager** downloads them on dem
 │   │       ├── main.tsx
 │   │       ├── index.css
 │   │       ├── env.d.ts
+│   │       ├── audio/
+│   │       │   ├── capture-controller.ts
+│   │       │   ├── level-meter.ts        # + .test.ts
+│   │       │   ├── ring-buffer.ts        # + .test.ts
+│   │       │   ├── system-audio-capture.ts
+│   │       │   └── vad-stream.ts
+│   │       ├── components/
+│   │       │   ├── AudioPanel.tsx
+│   │       │   ├── AudioSourcePicker.tsx
+│   │       │   └── LevelMeter.tsx
 │   │       └── overlay/
 │   │           └── Overlay.tsx
 │   └── shared/             # types shared by main, preload, renderer
+│       ├── audio-types.ts
 │       ├── ipc-contract.ts
 │       ├── settings-schema.ts
 │       └── constants.ts
 ├── .github/workflows/      # CI matrix (Windows + macOS + Linux)
-├── electron.vite.config.ts
+├── electron.vite.config.ts # also copies Silero VAD assets to /vad/
 ├── tsconfig.json           # renderer + shared (strict)
 ├── tsconfig.node.json      # main + preload + tooling (strict)
 └── package.json

@@ -16,6 +16,7 @@ import {
   type IpcResponse,
 } from '../shared/ipc-contract.js';
 import { type HotkeyActionValue } from '../shared/settings-schema.js';
+import { getAudioOrchestrator } from './audio/audio-orchestrator.js';
 import { getHotkeyManager } from './hotkeys/hotkey-manager.js';
 import { getOverlayManager, type OverlayEvent } from './overlay/overlay-window.js';
 import { getSettingsStore } from './settings/store.js';
@@ -146,6 +147,46 @@ export function registerIpcHandlers(): void {
     }
     return { hotkeys, registration };
   });
+
+  /* ---------------- Audio (Phase 2) ---------------- */
+  handle(IpcChannel.AudioListSources, async () => {
+    return getAudioOrchestrator().listSources();
+  });
+
+  handle(IpcChannel.AudioPrepareCapture, (_event, { source }) => {
+    try {
+      getAudioOrchestrator().prepareDisplayMedia(source);
+      getAudioOrchestrator().markRequesting(source);
+      return { ok: true as const };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      getAudioOrchestrator().markError(message);
+      return { ok: false as const, error: message };
+    }
+  });
+
+  handle(IpcChannel.AudioCaptureStarted, (_event, { source, sampleRate }) => {
+    return getAudioOrchestrator().markStarted(source, sampleRate);
+  });
+
+  handle(IpcChannel.AudioCaptureStopped, () => {
+    return getAudioOrchestrator().markStopped();
+  });
+
+  handle(IpcChannel.AudioReportLevel, (_event, tick) => {
+    getAudioOrchestrator().recordLevel(tick);
+  });
+
+  handle(IpcChannel.AudioReportSegment, (_event, segment) => {
+    getAudioOrchestrator().recordSegment(segment);
+    return { acknowledged: true as const };
+  });
+
+  handle(IpcChannel.AudioReportError, (_event, { message }) => {
+    return getAudioOrchestrator().markError(message);
+  });
+
+  handle(IpcChannel.AudioGetState, () => getAudioOrchestrator().getState());
 }
 
 /**
@@ -166,5 +207,16 @@ export function wireEventBroadcasts(): void {
 
   getSettingsStore().onChange((next) => {
     broadcastEvent(IpcEvent.SettingsChanged, next);
+  });
+
+  const audio = getAudioOrchestrator();
+  audio.on('state', (state) => {
+    broadcastEvent(IpcEvent.AudioCaptureStateChanged, state);
+  });
+  audio.on('level', (tick) => {
+    broadcastEvent(IpcEvent.AudioLevelTick, tick);
+  });
+  audio.on('segment', (segment) => {
+    broadcastEvent(IpcEvent.AudioSegmentReady, segment);
   });
 }

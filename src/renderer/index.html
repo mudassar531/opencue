@@ -6,14 +6,19 @@
     <!--
       Strict Content Security Policy.
       - default-src 'self': only load resources from this app.
-      - 'unsafe-inline' for styles is required for the Vite dev server's HMR client and
-        Tailwind's runtime style injection in dev. Production builds emit static CSS files
-        and the inline-style relaxation is harmless because all scripts are 'self'-only.
+      - script-src 'self' 'wasm-unsafe-eval': allow the renderer's own scripts +
+        WebAssembly modules used by onnxruntime-web for Silero VAD inference.
+      - 'unsafe-inline' for styles is required for the Vite dev server's HMR
+        client and Tailwind's runtime style injection in dev. Production builds
+        emit static CSS files and the inline-style relaxation is harmless because
+        all scripts are 'self'-only.
       - connect-src includes ws: for Vite HMR in dev. Remove ws: in stricter builds.
+      - worker-src includes blob: because the AudioWorklet bundle for Silero VAD
+        is loaded as a blob URL on some platforms.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*;"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*;"
     />
     <title>opencue</title>
   </head>

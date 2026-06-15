@@ -71,6 +71,23 @@ const bridge: OpencueBridge = {
     onTriggered: (listener) =>
       subscribe(IpcEvent.HotkeyTriggered, (payload) => listener(payload.action)),
   },
+  audio: {
+    listSources: () => invoke(IpcChannel.AudioListSources),
+    prepareCapture: (source) => invoke(IpcChannel.AudioPrepareCapture, { source }),
+    captureStarted: (source, sampleRate) =>
+      invoke(IpcChannel.AudioCaptureStarted, { source, sampleRate }),
+    captureStopped: () => invoke(IpcChannel.AudioCaptureStopped),
+    reportLevel: async (tick) => {
+      // Fire-and-forget; level ticks are high-frequency and not awaited.
+      await invoke(IpcChannel.AudioReportLevel, tick);
+    },
+    reportSegment: (segment) => invoke(IpcChannel.AudioReportSegment, segment),
+    reportError: (message) => invoke(IpcChannel.AudioReportError, { message }),
+    getState: () => invoke(IpcChannel.AudioGetState),
+    onStateChanged: (listener) => subscribe(IpcEvent.AudioCaptureStateChanged, listener),
+    onLevelTick: (listener) => subscribe(IpcEvent.AudioLevelTick, listener),
+    onSegmentReady: (listener) => subscribe(IpcEvent.AudioSegmentReady, listener),
+  },
 };
 
 contextBridge.exposeInMainWorld('opencue', bridge);

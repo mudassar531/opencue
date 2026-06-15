@@ -9,13 +9,13 @@
 
 ## Status
 
-🚧 Early development. Currently on **Phase 2 — Audio capture pipeline** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+🚧 Early development. Currently on **Phase 3 — Provider abstraction + cloud STT/LLM/TTS** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Repo, scaffolding & CI | ✅ shipped |
 | 1 | Overlay window & global hotkeys | ✅ shipped |
-| 2 | Audio capture pipeline (loopback + mic + VAD) | ⏳ |
+| 2 | Audio capture pipeline (loopback + mic + VAD) | ✅ shipped |
 | 3 | Provider abstraction + cloud STT/LLM/TTS | ⏳ |
 | 4 | Python sidecar + local models + model manager | ⏳ |
 | 5 | Screen context ("ask about your screen") | ⏳ |
@@ -60,6 +60,33 @@ opencue registers six global hotkeys. They are configurable through the typed IP
 | Toggle click-through | `Cmd/Ctrl + Shift + L` | Make the overlay pass mouse events to whatever is beneath it |
 
 The overlay is created with `BrowserWindow.setContentProtection(true)`, which excludes it from system screen capture and recording on Windows and macOS. The toggle in the main window lets you turn that off when, for example, you actually want the overlay to show up in a screenshot.
+
+## Audio capture (Phase 2)
+
+opencue's audio pipeline is fully on-device: the renderer acquires the user-selected source, runs **Silero VAD** locally via `onnxruntime-web`, and only ships normalized PCM segment metadata over IPC. Raw audio never leaves the renderer in this phase. Cloud STT (Phase 3) is what turns audio into text; local STT (Phase 4) runs through a Python sidecar.
+
+### Picking a source
+
+The picker offers three categories — only those supported on your OS are shown:
+
+- **Microphones** — every input device exposed by `navigator.mediaDevices.enumerateDevices()`.
+- **Screens (system audio)** — the desktop mix for a whole monitor.
+- **Windows (per-app audio)** — a single app's audio (e.g., a Google Meet tab).
+
+### Per-OS capability
+
+| Platform | System / loopback audio | Notes |
+| --- | --- | --- |
+| **Windows** | ✅ via Chromium's WASAPI loopback when a screen / window source is picked | Works out of the box. |
+| **macOS** | ✅ via ScreenCaptureKit (macOS 13+) when a screen / window source is picked | First launch will prompt for **Screen & System Audio Recording**. Open *System Settings → Privacy & Security → Screen Recording* and enable opencue, then click **refresh** in the picker. The microphone picker also needs the macOS microphone permission. |
+| **Linux** | ⚠️ no native loopback path | The picker hides the screen / window categories. Pick a **microphone**, or select a *Monitor of …* input (PulseAudio / PipeWire exposes one per output sink) to capture whatever is currently playing. |
+
+If `desktopCapturer.getSources()` fails (typically because the OS permission hasn't been granted yet), the picker shows a CTA that walks the user through the permission flow instead of a generic error.
+
+### What runs where
+
+- **Renderer** — `getUserMedia` / `getDisplayMedia`, `AudioContext`, `AnalyserNode` for the live level meter (~20 Hz), Silero VAD via `@ricky0123/vad-web`, ring buffer of recent PCM, segment dispatcher.
+- **Main** — `desktopCapturer` enumeration, one-shot `setDisplayMediaRequestHandler` so the renderer's `getDisplayMedia` call resolves to the chosen source with `audio: 'loopback'`, canonical `AudioCaptureState` plus event broadcast (`AudioCaptureStateChanged`, `AudioLevelTick`, `AudioSegmentReady`).
 
 ## Build from source
 
