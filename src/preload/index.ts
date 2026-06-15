@@ -139,6 +139,10 @@ const bridge: OpencueBridge = {
   ollama: {
     listModels: () => invoke(IpcChannel.OllamaListModels),
   },
+  screen: {
+    listSources: () => invoke(IpcChannel.ScreenListSources),
+    capture: (args) => invoke(IpcChannel.ScreenCapture, args ?? {}),
+  },
 };
 
 contextBridge.exposeInMainWorld('opencue', bridge);

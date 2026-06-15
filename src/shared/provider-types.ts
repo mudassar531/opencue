@@ -66,9 +66,19 @@ export type LlmProviderIdValue = (typeof LlmProviderId)[keyof typeof LlmProvider
 
 export type LlmRole = 'system' | 'user' | 'assistant';
 
+/** Optional inline image attachment for multimodal LLMs. */
+export interface LlmImageAttachment {
+  /** Data URL, e.g. `data:image/png;base64,...`. */
+  dataUrl: string;
+  /** Optional caption shown to the model alongside the image. */
+  caption?: string;
+}
+
 export interface LlmMessage {
   role: LlmRole;
   content: string;
+  /** Image attachments — only honored on the `user` role by multimodal providers. */
+  images?: LlmImageAttachment[];
 }
 
 export interface LlmRequest {

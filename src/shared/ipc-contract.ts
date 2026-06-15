@@ -163,6 +163,10 @@ export const IpcChannel = {
   SidecarStart: 'sidecar:start',
   SidecarStop: 'sidecar:stop',
   OllamaListModels: 'ollama:list-models',
+
+  // Screen capture (Phase 5).
+  ScreenListSources: 'screen:list-sources',
+  ScreenCapture: 'screen:capture',
 } as const;
 
 export type IpcChannelValue = (typeof IpcChannel)[keyof typeof IpcChannel];
@@ -332,7 +336,12 @@ export interface IpcContract {
     response: { transcribed: boolean };
   };
   [IpcChannel.AssistRun]: {
-    request: { prompt?: string; isRecap?: boolean; triggeredBy: 'hotkey' | 'manual' | 'auto' };
+    request: {
+      prompt?: string;
+      isRecap?: boolean;
+      screenshotDataUrl?: string;
+      triggeredBy: 'hotkey' | 'manual' | 'auto';
+    };
     response: { suggestionId: number | null };
   };
   [IpcChannel.AssistCancel]: {
@@ -380,6 +389,22 @@ export interface IpcContract {
   [IpcChannel.OllamaListModels]: {
     request: void;
     response: { reachable: boolean; models: string[]; baseUrl: string };
+  };
+
+  /* ---------- Screen capture (Phase 5) ---------- */
+  [IpcChannel.ScreenListSources]: {
+    request: void;
+    response: { id: string; label: string; kind: 'screen' | 'window' }[];
+  };
+  [IpcChannel.ScreenCapture]: {
+    request: { sourceId?: string };
+    response: {
+      dataUrl: string;
+      width: number;
+      height: number;
+      byteSize: number;
+      source: { id: string; label: string; kind: 'screen' | 'window' };
+    };
   };
 }
 
@@ -538,6 +563,7 @@ export interface OpencueBridge {
     run(args: {
       prompt?: string;
       isRecap?: boolean;
+      screenshotDataUrl?: string;
       triggeredBy: 'hotkey' | 'manual' | 'auto';
     }): Promise<IpcResponse<typeof IpcChannel.AssistRun>>;
     cancel(): Promise<IpcResponse<typeof IpcChannel.AssistCancel>>;
@@ -576,5 +602,11 @@ export interface OpencueBridge {
   };
   ollama: {
     listModels(): Promise<IpcResponse<typeof IpcChannel.OllamaListModels>>;
+  };
+  screen: {
+    listSources(): Promise<IpcResponse<typeof IpcChannel.ScreenListSources>>;
+    capture(
+      args?: { sourceId?: string },
+    ): Promise<IpcResponse<typeof IpcChannel.ScreenCapture>>;
   };
 }

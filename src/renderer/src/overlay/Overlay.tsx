@@ -40,6 +40,7 @@ export function Overlay(): JSX.Element {
   const [recent, setRecent] = useState<RecentHotkey | null>(null);
   const [askInput, setAskInput] = useState('');
   const [askVisible, setAskVisible] = useState(false);
+  const [askIncludeScreen, setAskIncludeScreen] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [suggestions, setSuggestions] = useState<AssistSuggestion[]>([]);
   const [assistStatus, setAssistStatus] = useState<AssistStatus>('idle');
@@ -186,7 +187,22 @@ export function Overlay(): JSX.Element {
               e.preventDefault();
               const prompt = askInput.trim();
               if (prompt.length > 0) {
-                void window.opencue.assist.run({ prompt, triggeredBy: 'manual' });
+                void (async () => {
+                  const args: {
+                    triggeredBy: 'manual';
+                    prompt: string;
+                    screenshotDataUrl?: string;
+                  } = { triggeredBy: 'manual', prompt };
+                  if (askIncludeScreen) {
+                    try {
+                      const shot = await window.opencue.screen.capture();
+                      args.screenshotDataUrl = shot.dataUrl;
+                    } catch {
+                      // Best-effort — fall through with text only.
+                    }
+                  }
+                  await window.opencue.assist.run(args);
+                })();
               }
               setAskInput('');
               setAskVisible(false);
@@ -200,6 +216,18 @@ export function Overlay(): JSX.Element {
               className="flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs placeholder-slate-500 focus:border-cue-400 focus:outline-none"
               autoComplete="off"
             />
+            <button
+              type="button"
+              onClick={() => setAskIncludeScreen((v) => !v)}
+              className={`rounded-md px-2 py-1 text-[10px] ${
+                askIncludeScreen
+                  ? 'bg-cue-500/30 text-cue-100'
+                  : 'text-slate-400 hover:bg-white/10'
+              }`}
+              title="Include a screenshot with this Ask"
+            >
+              📷
+            </button>
             <button
               type="button"
               onClick={() => setAskVisible(false)}

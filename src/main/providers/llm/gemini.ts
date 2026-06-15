@@ -140,23 +140,41 @@ export class GeminiProvider implements LlmProvider {
 
 function transformMessages(messages: LlmMessage[]): {
   systemInstruction: { parts: { text: string }[] } | undefined;
-  contents: { role: 'user' | 'model'; parts: { text: string }[] }[];
+  contents: { role: 'user' | 'model'; parts: GeminiPartInput[] }[];
 } {
   const systemParts: string[] = [];
-  const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
+  const contents: { role: 'user' | 'model'; parts: GeminiPartInput[] }[] = [];
   for (const m of messages) {
     if (m.role === 'system') {
       systemParts.push(m.content);
-    } else {
-      contents.push({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      });
+      continue;
     }
+    const parts: GeminiPartInput[] = [];
+    if (m.content && m.content.length > 0) parts.push({ text: m.content });
+    for (const image of m.images ?? []) {
+      const parsed = parseDataUrl(image.dataUrl);
+      if (!parsed) continue;
+      if (image.caption) parts.push({ text: image.caption });
+      parts.push({ inlineData: { mimeType: parsed.mediaType, data: parsed.base64 } });
+    }
+    contents.push({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts,
+    });
   }
   return {
     systemInstruction:
       systemParts.length > 0 ? { parts: [{ text: systemParts.join('\n\n') }] } : undefined,
     contents,
   };
+}
+
+type GeminiPartInput =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
+
+function parseDataUrl(dataUrl: string): { mediaType: string; base64: string } | null {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  return { mediaType: match[1] ?? 'image/png', base64: match[2] ?? '' };
 }

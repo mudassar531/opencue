@@ -29,6 +29,7 @@ import {
   setApiKey,
 } from './providers/secret-keys.js';
 import { getProviderRouter } from './providers/router.js';
+import { captureScreen, listScreenCaptureSources } from './screen/screen-capture.js';
 import { getSecretStore, getSettingsStore } from './settings/store.js';
 import { getSidecarManager } from './sidecar/sidecar-manager.js';
 
@@ -293,6 +294,21 @@ export function registerIpcHandlers(): void {
     const baseUrl = process.env.OPENCUE_OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434';
     const models = await OllamaProvider.listInstalled(baseUrl);
     return { reachable: models.length > 0 || models !== undefined, models, baseUrl };
+  });
+
+  /* ---------------- Screen capture (Phase 5) ---------------- */
+  handle(IpcChannel.ScreenListSources, () => listScreenCaptureSources());
+  handle(IpcChannel.ScreenCapture, async (_event, args) => {
+    const opts: { sourceId?: string } = {};
+    if (args && typeof args.sourceId === 'string') opts.sourceId = args.sourceId;
+    const result = await captureScreen(opts);
+    return {
+      dataUrl: result.dataUrl,
+      width: result.width,
+      height: result.height,
+      byteSize: result.byteSize,
+      source: result.source,
+    };
   });
 }
 

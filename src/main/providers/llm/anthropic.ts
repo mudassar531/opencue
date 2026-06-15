@@ -53,7 +53,7 @@ export class AnthropicProvider implements LlmProvider {
       model: this.model,
       max_tokens: request.maxOutputTokens ?? 1024,
       stream: true,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: messages.map(transformAnthropicMessage),
     };
     if (system) body.system = system;
     if (request.temperature !== undefined) body.temperature = request.temperature;
@@ -152,4 +152,38 @@ function splitSystem(messages: LlmMessage[]): {
     system: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
     messages: rest,
   };
+}
+
+/**
+ * Anthropic accepts either a plain string content or an array of typed parts
+ * (text + image). Images are passed as `{ type: 'image', source: { type:
+ * 'base64', media_type, data } }` — we parse the data URL to extract the
+ * media type and the base64 body.
+ */
+export function transformAnthropicMessage(message: LlmMessage): {
+  role: 'user' | 'assistant';
+  content: string | unknown[];
+} {
+  const role = message.role === 'assistant' ? 'assistant' : 'user';
+  if (!message.images || message.images.length === 0) {
+    return { role, content: message.content };
+  }
+  const parts: unknown[] = [];
+  for (const image of message.images) {
+    const parsed = parseDataUrl(image.dataUrl);
+    if (!parsed) continue;
+    if (image.caption) parts.push({ type: 'text', text: image.caption });
+    parts.push({
+      type: 'image',
+      source: { type: 'base64', media_type: parsed.mediaType, data: parsed.base64 },
+    });
+  }
+  parts.push({ type: 'text', text: message.content });
+  return { role, content: parts };
+}
+
+function parseDataUrl(dataUrl: string): { mediaType: string; base64: string } | null {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  return { mediaType: match[1] ?? 'image/png', base64: match[2] ?? '' };
 }

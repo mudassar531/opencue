@@ -54,7 +54,7 @@ export class OpenAiLlmProvider implements LlmProvider {
     }
     const body: Record<string, unknown> = {
       model: this.model,
-      messages: request.messages,
+      messages: request.messages.map(transformOpenAiMessage),
       stream: true,
     };
     if (request.temperature !== undefined) body.temperature = request.temperature;
@@ -154,4 +154,25 @@ async function safeText(response: Response): Promise<string> {
   } catch {
     return '';
   }
+}
+
+/**
+ * Convert opencue's typed LlmMessage into the OpenAI Chat Completions
+ * payload. When the message has images we emit the array-of-parts content
+ * form that vision-capable models (gpt-4o, gpt-4o-mini, gpt-4.1) consume.
+ */
+export function transformOpenAiMessage(message: {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  images?: { dataUrl: string; caption?: string }[];
+}): { role: 'system' | 'user' | 'assistant'; content: string | unknown[] } {
+  if (!message.images || message.images.length === 0) {
+    return { role: message.role, content: message.content };
+  }
+  const parts: unknown[] = [{ type: 'text', text: message.content }];
+  for (const image of message.images) {
+    if (image.caption) parts.push({ type: 'text', text: image.caption });
+    parts.push({ type: 'image_url', image_url: { url: image.dataUrl } });
+  }
+  return { role: message.role, content: parts };
 }

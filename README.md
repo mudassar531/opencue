@@ -9,7 +9,7 @@
 
 ## Status
 
-🚧 Early development. Currently on **Phase 5 — Screen context ("ask about your screen")** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+🚧 Early development. Currently on **Phase 6 — Meeting integrations, sessions & export** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -18,7 +18,7 @@
 | 2 | Audio capture pipeline (loopback + mic + VAD) | ✅ shipped |
 | 3 | Provider abstraction + cloud STT/LLM/TTS | ✅ shipped |
 | 4 | Python sidecar + local models + model manager | ✅ shipped |
-| 5 | Screen context ("ask about your screen") | ⏳ |
+| 5 | Screen context (ask about your screen) | ✅ shipped |
 | 6 | Meeting integrations, sessions & export | ⏳ |
 | 7 | Packaging, auto-update & release | ⏳ |
 
@@ -108,6 +108,17 @@ With keys configured:
 4. Open the overlay's ask-bar (`⌘⇧/`) or use the **Ask** form in the main window to type a freeform question. Set the **TTS auto-play** toggle if you want the answer spoken.
 
 Local providers (faster-whisper / Parakeet / Piper / Kokoro / Ollama) land in Phase 4 behind the exact same interface, so switching cloud ↔ local is a single settings change.
+
+## Ask about your screen (Phase 5)
+
+Multimodal Ask combines the meeting transcript with an on-demand screenshot:
+
+* **In the overlay's ask-bar (`⌘⇧/`)** — tap the `📷` icon before submitting to attach a screenshot of your current display.
+* **In the main window's Ask form** — tick *Include a screenshot with the next Ask*.
+
+The screenshot is sent inline to multimodal-capable providers (OpenAI gpt-4o / 4.1, Anthropic Claude 3.x, Google Gemini 2.x). Text-only providers (Groq / Ollama) gracefully degrade — the prompt text still goes through, the image is dropped.
+
+opencue's overlay is `setContentProtection(true)` by default, so it doesn't appear in screen captures on Windows / macOS. The renderer additionally **hides the overlay** for one frame around every capture call as belt-and-braces for OSes where content protection isn't honored.
 
 ## Run fully local (Phase 4)
 

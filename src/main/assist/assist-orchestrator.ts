@@ -39,6 +39,8 @@ export interface AssistRunArgs {
   prompt?: string;
   /** When true we use the recap prompt instead. */
   isRecap?: boolean;
+  /** Optional inline screenshot to pass to multimodal LLMs. */
+  screenshotDataUrl?: string;
   triggeredBy: 'hotkey' | 'manual' | 'auto';
 }
 
@@ -146,6 +148,15 @@ export class AssistOrchestrator extends EventEmitter {
       settings.assistSystemPrompt,
       userPrompt,
     );
+    if (args.screenshotDataUrl) {
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+      if (lastUser) {
+        lastUser.images = [
+          ...(lastUser.images ?? []),
+          { dataUrl: args.screenshotDataUrl, caption: 'Screenshot of the user\'s screen.' },
+        ];
+      }
+    }
 
     const provider = getProviderRouter().getLlmProvider();
     this.suggestionCounter += 1;

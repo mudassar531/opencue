@@ -25,6 +25,8 @@ export function AssistPanel(): JSX.Element {
   const [status, setStatus] = useState<AssistStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [ask, setAsk] = useState('');
+  const [includeScreen, setIncludeScreen] = useState(false);
+  const [screenError, setScreenError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,14 +93,27 @@ export function AssistPanel(): JSX.Element {
       const prompt = text ?? ask;
       if (!prompt && !isRecap) return;
       setAsk('');
-      const args: { triggeredBy: 'manual'; prompt?: string; isRecap?: boolean } = {
-        triggeredBy: 'manual',
-      };
+      setScreenError(null);
+      const args: {
+        triggeredBy: 'manual';
+        prompt?: string;
+        isRecap?: boolean;
+        screenshotDataUrl?: string;
+      } = { triggeredBy: 'manual' };
       if (prompt) args.prompt = prompt;
       if (isRecap) args.isRecap = isRecap;
+      if (includeScreen) {
+        try {
+          const shot = await window.opencue.screen.capture();
+          args.screenshotDataUrl = shot.dataUrl;
+        } catch (err) {
+          setScreenError(err instanceof Error ? err.message : String(err));
+          return;
+        }
+      }
       await window.opencue.assist.run(args);
     },
-    [ask],
+    [ask, includeScreen],
   );
 
   const resetSession = useCallback(async () => {
@@ -129,7 +144,7 @@ export function AssistPanel(): JSX.Element {
       ) : null}
 
       <form
-        className="mb-4 flex items-center gap-2"
+        className="mb-2 flex items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void submitAsk();
@@ -164,6 +179,20 @@ export function AssistPanel(): JSX.Element {
           Reset
         </button>
       </form>
+      <div className="mb-4 flex items-center justify-between text-[11px] text-slate-400">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={includeScreen}
+            onChange={(e) => setIncludeScreen(e.target.checked)}
+          />
+          <span>Include a screenshot with the next Ask</span>
+          <span className="text-[10px] text-slate-500">
+            (overlay is hidden during capture)
+          </span>
+        </label>
+        {screenError ? <span className="text-rose-300">{screenError}</span> : null}
+      </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
