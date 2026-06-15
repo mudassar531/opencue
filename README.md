@@ -9,12 +9,12 @@
 
 ## Status
 
-🚧 Early development. Currently on **Phase 0 — Repo, scaffolding & CI** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+🚧 Early development. Currently on **Phase 2 — Audio capture pipeline** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 0 | Repo, scaffolding & CI | ✅ in progress |
-| 1 | Overlay window & global hotkeys | ⏳ |
+| 0 | Repo, scaffolding & CI | ✅ shipped |
+| 1 | Overlay window & global hotkeys | ✅ shipped |
 | 2 | Audio capture pipeline (loopback + mic + VAD) | ⏳ |
 | 3 | Provider abstraction + cloud STT/LLM/TTS | ⏳ |
 | 4 | Python sidecar + local models + model manager | ⏳ |
@@ -45,6 +45,21 @@ opencue's signature features — system/loopback audio capture, an always-on-top
 - **Cloud providers (added in Phase 3)** — Deepgram, OpenAI, AssemblyAI (STT); OpenAI, Anthropic, Google Gemini, Groq (LLM); ElevenLabs, OpenAI, Cartesia (TTS); Ollama for local LLM.
 
 > **Note on Parakeet:** Parakeet is NVIDIA's speech-to-text (ASR) family — it lives under STT, not TTS. Local TTS uses Piper/Kokoro.
+
+## Default hotkeys (Phase 1)
+
+opencue registers six global hotkeys. They are configurable through the typed IPC API today and through a dedicated settings UI in Phase 6.
+
+| Action | Default accelerator | Effect |
+| --- | --- | --- |
+| Toggle overlay | `Cmd/Ctrl + Shift + \` | Show or hide the overlay window |
+| Move overlay | `Cmd/Ctrl + Shift + M` | Cycle through top-right → bottom-right → bottom-left → top-left → center |
+| Assist | `Cmd/Ctrl + Shift + Enter` | Wake the overlay and trigger the Assist action (LLM call lands in Phase 3) |
+| Recap | `Cmd/Ctrl + Shift + R` | Wake the overlay and ask for a recap of the meeting so far |
+| Open ask-bar | `Cmd/Ctrl + Shift + /` | Show the overlay's ask input |
+| Toggle click-through | `Cmd/Ctrl + Shift + L` | Make the overlay pass mouse events to whatever is beneath it |
+
+The overlay is created with `BrowserWindow.setContentProtection(true)`, which excludes it from system screen capture and recording on Windows and macOS. The toggle in the main window lets you turn that off when, for example, you actually want the overlay to show up in a screenshot.
 
 ## Build from source
 

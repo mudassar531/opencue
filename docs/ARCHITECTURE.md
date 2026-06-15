@@ -87,7 +87,49 @@ Every cross-process call is declared once in [`src/shared/ipc-contract.ts`](../s
 
 There are no ad-hoc string channels anywhere else — `grep` for `ipcRenderer.invoke` and `ipcMain.handle` should hit only these two files.
 
-## Audio pipeline (planned — Phase 2)
+## Overlay window (Phase 1)
+
+The overlay is a second `BrowserWindow` created and owned by `src/main/overlay/overlay-window.ts`. It is:
+
+| Property | Value | Why |
+| --- | --- | --- |
+| `frame: false` | yes | Custom chrome / draggable header |
+| `transparent: true` | yes | Rounded translucent card sits on top of any window |
+| `hasShadow: false` | yes | Required when `transparent` is on for clean compositing |
+| `alwaysOnTop: true` | yes | Floats above other apps; `'screen-saver'` level on macOS so it survives full-screen |
+| `skipTaskbar: true` | yes | Doesn't pollute the dock / taskbar |
+| `setContentProtection(true)` | yes | **Signature feature** — excluded from screen capture & recording (Win + macOS). Toggle in settings. |
+| `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })` (macOS) | yes | Survives Spaces / full-screen swap |
+| `webPreferences.sandbox: true` | yes | Same hardening as the main window |
+
+The overlay UI is a separate React tree (`src/renderer/src/overlay/Overlay.tsx`). The same renderer build serves both windows; the main process appends `?view=overlay` to the URL so `main.tsx` can mount the correct root component.
+
+Move + resize events are debounced (250 ms) and persisted to the settings store so the overlay remembers its last position across launches.
+
+### Click-through
+
+When `clickThrough` is on, `setIgnoreMouseEvents(true, { forward: true })` makes the overlay invisible to the mouse so the user can interact with whatever is beneath it. Hovering or clicking still wakes the overlay's window-level events, just not its DOM.
+
+## Global hotkeys (Phase 1)
+
+`src/main/hotkeys/hotkey-manager.ts` wraps Electron's `globalShortcut`. The renderer never sees an accelerator string at runtime — only **named actions** (`HotkeyAction` enum). The manager:
+
+1. Loads the user-configured map from settings on boot (`applyAll`).
+2. Re-registers atomically when the user updates a binding.
+3. Emits a typed `trigger` event when a hotkey fires; the IPC layer relays it as the `event:hotkey-triggered` push to every renderer.
+
+Six actions ship with sane defaults — see the table in the README. The manager surfaces per-action `HotkeyRegistrationResult`s (with the OS error message when registration fails so the UI can guide the user to pick a different combo).
+
+## Settings & secret storage (Phase 1)
+
+| Layer | File | Encryption | What lives there |
+| --- | --- | --- | --- |
+| Public preferences | `opencue-settings.json` (user-data dir) | none (plain JSON) | overlay state, hotkey map, schema version |
+| Secrets | `opencue-secrets.json` (user-data dir) | **`safeStorage`** — Keychain / DPAPI / libsecret | API keys (Phase 3+), never logged |
+
+Both stores live in `src/main/settings/store.ts`. The renderer never reads or writes them directly — only through typed IPC handlers. The schema and its migrations live in `src/shared/settings-schema.ts` (pure TypeScript, no Electron dep) so both processes and the test runner can import it.
+
+
 
 ```text
 SystemAudioCapture (per-OS adapter)
@@ -153,7 +195,14 @@ Models are not bundled. The main-process **model manager** downloads them on dem
 ├── src/
 │   ├── main/               # Electron main process (privileged)
 │   │   ├── index.ts
-│   │   └── ipc.ts
+│   │   ├── ipc.ts
+│   │   ├── overlay/
+│   │   │   ├── overlay-window.ts
+│   │   │   └── overlay-window.test.ts
+│   │   ├── hotkeys/
+│   │   │   └── hotkey-manager.ts
+│   │   └── settings/
+│   │       └── store.ts            # electron-store + safeStorage
 │   ├── preload/            # contextBridge — ONLY path to the renderer
 │   │   └── index.ts
 │   ├── renderer/           # React UI — no Node access
@@ -162,9 +211,12 @@ Models are not bundled. The main-process **model manager** downloads them on dem
 │   │       ├── App.tsx
 │   │       ├── main.tsx
 │   │       ├── index.css
-│   │       └── env.d.ts
+│   │       ├── env.d.ts
+│   │       └── overlay/
+│   │           └── Overlay.tsx
 │   └── shared/             # types shared by main, preload, renderer
 │       ├── ipc-contract.ts
+│       ├── settings-schema.ts
 │       └── constants.ts
 ├── .github/workflows/      # CI matrix (Windows + macOS + Linux)
 ├── electron.vite.config.ts

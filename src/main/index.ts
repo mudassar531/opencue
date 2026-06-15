@@ -1,19 +1,26 @@
 /**
  * Main process entry point for opencue.
  *
- * Responsibilities (Phase 0): create a single BrowserWindow, load the renderer,
- * wire IPC handlers, and configure security defaults.
+ * Boots in this order:
+ *   1. Settings store (loads persisted preferences).
+ *   2. Main window (settings / debug surface — Phase 0).
+ *   3. Overlay window (Phase 1 — frameless, transparent, always-on-top).
+ *   4. Global hotkeys + IPC handlers + event broadcasts.
  *
- * Later phases add: overlay window manager + content protection (Phase 1),
- * audio capture orchestrator (Phase 2), provider router (Phase 3),
- * Python sidecar lifecycle (Phase 4), screen capture (Phase 5),
+ * Later phases add: audio capture orchestrator (Phase 2), provider router
+ * (Phase 3), Python sidecar lifecycle (Phase 4), screen capture (Phase 5),
  * session manager (Phase 6), and updater (Phase 7).
  */
 
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, globalShortcut, shell } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { registerIpcHandlers } from './ipc.js';
+import { HotkeyAction } from '../shared/settings-schema.js';
+import { getHotkeyManager } from './hotkeys/hotkey-manager.js';
+import { broadcastEvent, registerIpcHandlers, wireEventBroadcasts } from './ipc.js';
+import { getOverlayManager } from './overlay/overlay-window.js';
+import { getSettingsStore } from './settings/store.js';
+import { IpcEvent } from '../shared/ipc-contract.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -50,7 +57,6 @@ function createMainWindow(): BrowserWindow {
     return { action: 'deny' };
   });
 
-  // Show only when ready to avoid the white-flash on launch.
   win.once('ready-to-show', () => {
     win.show();
   });
@@ -70,13 +76,60 @@ function createMainWindow(): BrowserWindow {
   return win;
 }
 
+/** Bind the side-effects of each named hotkey action to a real handler. */
+function wireHotkeyActions(): void {
+  const overlay = getOverlayManager();
+  getHotkeyManager().onTrigger((action) => {
+    switch (action) {
+      case HotkeyAction.ToggleOverlay:
+        overlay.toggle();
+        break;
+      case HotkeyAction.CycleOverlayPosition:
+        overlay.cyclePosition();
+        break;
+      case HotkeyAction.ToggleClickThrough: {
+        const current = getSettingsStore().getOverlay().clickThrough;
+        overlay.setClickThrough(!current);
+        break;
+      }
+      case HotkeyAction.Assist:
+      case HotkeyAction.Recap:
+      case HotkeyAction.ToggleAskBar:
+        // These are pure renderer-facing actions; the broadcast event
+        // (HotkeyTriggered) is what the overlay UI listens for.
+        overlay.show();
+        broadcastEvent(IpcEvent.HotkeyTriggered, { action });
+        break;
+    }
+  });
+}
+
 void app.whenReady().then(() => {
+  // Order matters: load settings first so window managers can read defaults.
+  const settings = getSettingsStore().get();
+
   registerIpcHandlers();
+  wireEventBroadcasts();
+  wireHotkeyActions();
+
+  // Register global hotkeys from the persisted settings.
+  const registration = getHotkeyManager().applyAll(settings.hotkeys);
+  for (const r of registration) {
+    if (!r.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`opencue: hotkey "${r.action}" → "${r.accelerator}" failed: ${r.error}`);
+    }
+  }
+
   mainWindow = createMainWindow();
+  // Ensure the overlay exists immediately so the user can summon it via hotkey
+  // even before opening the main window.
+  getOverlayManager().ensure();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createMainWindow();
+      getOverlayManager().ensure();
     }
   });
 });
@@ -86,6 +139,12 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  getHotkeyManager().unregisterAll();
+  getOverlayManager().destroy();
 });
 
 // Hard-deny any unexpected webContents creation — defense in depth.
