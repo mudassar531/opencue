@@ -56,6 +56,8 @@ sidecar/*.egg-info/
 sidecar/.venv/
 sidecar/venv/
 
-# Downloaded models / app data (huge; never commit)
-models/
+# Downloaded models / app data (huge; never commit).
+# Anchor with a leading slash so we don't accidentally git-ignore the source
+# directory `src/main/models/`.
+/models/
 .cache/
