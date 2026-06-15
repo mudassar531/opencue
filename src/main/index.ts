@@ -24,6 +24,7 @@ import { getOverlayManager } from './overlay/overlay-window.js';
 import { getSessionManager } from './sessions/session-manager.js';
 import { getSettingsStore } from './settings/store.js';
 import { getSidecarManager } from './sidecar/sidecar-manager.js';
+import { initAutoUpdater } from './updater.js';
 import { IpcEvent } from '../shared/ipc-contract.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -144,6 +145,9 @@ void app.whenReady().then(() => {
   // Ensure the overlay exists immediately so the user can summon it via hotkey
   // even before opening the main window.
   getOverlayManager().ensure();
+
+  // Auto-update check (no-op in dev).
+  initAutoUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

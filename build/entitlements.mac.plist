@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Entitlements required for opencue's macOS distribution.
+
+  - `com.apple.security.cs.allow-jit` + `allow-unsigned-executable-memory`
+    are required by Electron / V8 + the Python sidecar in dev runs.
+  - `com.apple.security.device.audio-input` is required to capture mic
+    audio after the Phase-2 source picker.
+  - `com.apple.security.network.client` is required for cloud STT/LLM/TTS
+    HTTPS requests.
+  - `com.apple.security.files.user-selected.read-write` lets the user
+    save exported Markdown via the OS save panel.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+  </dict>
+</plist>

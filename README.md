@@ -9,7 +9,7 @@
 
 ## Status
 
-🚧 Early development. Currently on **Phase 7 — Packaging, auto-update & release** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+🚀 First release line — **all eight build phases are now in `main`**. Tagging `v0.1.0` (or any `v*` tag) triggers cross-platform packaging via GitHub Actions and uploads installers to the corresponding GitHub Release.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -20,7 +20,7 @@
 | 4 | Python sidecar + local models + model manager | ✅ shipped |
 | 5 | Screen context (ask about your screen) | ✅ shipped |
 | 6 | Meeting integrations, sessions & export | ✅ shipped |
-| 7 | Packaging, auto-update & release | ⏳ |
+| 7 | Packaging, auto-update & release | ✅ shipped |
 
 ---
 
@@ -108,6 +108,30 @@ With keys configured:
 4. Open the overlay's ask-bar (`⌘⇧/`) or use the **Ask** form in the main window to type a freeform question. Set the **TTS auto-play** toggle if you want the answer spoken.
 
 Local providers (faster-whisper / Parakeet / Piper / Kokoro / Ollama) land in Phase 4 behind the exact same interface, so switching cloud ↔ local is a single settings change.
+
+## Install (Phase 7)
+
+Pre-built installers for every tagged release ship from this repo's [Releases page](https://github.com/mudassar531/opencue/releases):
+
+- **Windows** — NSIS installer (`opencue-<version>-x64-setup.exe`).
+- **macOS** — disk image (`opencue-<version>-x64.dmg` and `-arm64.dmg`).
+- **Linux** — AppImage (`opencue-<version>-x86_64.AppImage`) and Debian package (`opencue_<version>_amd64.deb`).
+
+Auto-updates are wired via `electron-updater` against this repository's Releases, so installed builds upgrade themselves to the next tagged version on the next launch.
+
+> Note: unofficial builds from CI are **not code-signed yet**. macOS will Gatekeeper-block them on first launch; right-click → Open → Open the first time. Windows SmartScreen may show a 'Publisher unknown' warning until we add a code-signing certificate. See `electron-builder.yml` + `build/entitlements.mac.plist` for the production signing shape.
+
+### Build it yourself
+
+```bash
+npm install
+npm run package          # current OS only
+npm run package:mac      # macOS dmg (x64 + arm64)
+npm run package:win      # Windows NSIS installer
+npm run package:linux    # AppImage + .deb
+```
+
+Output lands in `release/`. Set `CSC_LINK` / `CSC_KEY_PASSWORD` (and on macOS `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`) to sign + notarize — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Sessions, summaries & export (Phase 6)
 

@@ -300,9 +300,29 @@ Models are not bundled. The main-process **model manager** downloads them on dem
 - **IPC input validation** — every handler validates its payload before acting.
 - **Overlay content protection** — `BrowserWindow.setContentProtection(true)` so the overlay is excluded from screen capture / recording (Phase 1).
 
-## Build & release (planned — Phase 7)
+## Build & release (Phase 7)
 
-`electron-builder` produces Windows (NSIS), macOS (dmg), and Linux (AppImage / deb) artifacts in CI. The Python sidecar is bundled per-platform via PyInstaller. `electron-updater` ships updates from GitHub Releases. Signing & notarization steps are documented in `README.md` and `CONTRIBUTING.md`.
+```text
+electron-vite build  ─►  out/{main,preload,renderer}
+                                 │
+                                 ▼
+       electron-builder ──► release/
+                                 ├── opencue-<v>-arm64.dmg
+                                 ├── opencue-<v>-x64.dmg
+                                 ├── opencue-<v>-x64-setup.exe
+                                 ├── opencue-<v>.AppImage
+                                 ├── opencue_<v>_amd64.deb
+                                 └── latest*.yml  ◄── electron-updater feed
+                                                            │
+                                                            ▼
+                                                    GitHub Release
+                                                  (auto-uploaded by CI)
+```
+
+* `electron-builder.yml` configures one bundle that produces dmg (mac), NSIS (Windows), and AppImage + deb (Linux). Sidecar files are emitted as `extraResources` into `Contents/Resources/sidecar/` so the `SidecarManager` can spawn them in production exactly as in dev.
+* `build/entitlements.mac.plist` declares the entitlements opencue needs after macOS hardening (mic, network client, JIT for V8 + Python, user-selected file read/write for the Markdown export save dialog).
+* `electron-updater` (`src/main/updater.ts`) runs `checkForUpdatesAndNotify()` 5 seconds after boot in packaged builds, downloads in the background, and installs on next quit.
+* `.github/workflows/release.yml` triggers on every `v*` tag push, runs the build matrix (macOS / Windows / Ubuntu), packages with `electron-builder --publish=always`, and uploads to the corresponding GitHub Release. Code signing + Apple notarization are gated on optional secrets (`CSC_LINK`, `APPLE_ID`, …) — the workflow happily produces unsigned builds when those secrets are absent so contributors / forks always get artifacts.
 
 ## Repository layout
 

@@ -7,7 +7,8 @@ node_modules/
 out/
 dist/
 dist-electron/
-build/
+build/dist
+build/temp
 *.tsbuildinfo
 
 # Electron-builder artifacts

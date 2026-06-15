@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.os }} · package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Linux Electron dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 libatk-bridge2.0-0 libdrm2 libgtk-3-0 libgbm1 libasound2t64 \
+            libxshmfence1 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libxkbcommon0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer / main / preload
+        run: npm run build
+
+      - name: Package
+        env:
+          # GH_TOKEN is required so electron-builder can upload artifacts to the
+          # GitHub Release matching the pushed tag.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code-signing (skip when secrets are not configured).
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # macOS notarization (Apple ID + app-specific password). Optional.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          npx electron-builder --publish=always --config electron-builder.yml
+
+      - name: Upload artifacts (workflow run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencue-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/*.zip
+            release/latest*.yml
+          if-no-files-found: ignore
+          retention-days: 14
