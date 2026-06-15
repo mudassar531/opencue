@@ -1,0 +1,81 @@
+# opencue
+
+> Open-source meeting copilot — a desktop app that listens to your meeting, transcribes it in real time, and surfaces AI-powered notes & answers in a discreet always-on-top overlay. Use your own API keys or run **fully local** with downloadable models.
+
+[![CI](https://github.com/mudassar531/opencue/actions/workflows/ci.yml/badge.svg)](https://github.com/mudassar531/opencue/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+---
+
+## Status
+
+🚧 Early development. Currently on **Phase 0 — Repo, scaffolding & CI** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 0 | Repo, scaffolding & CI | ✅ in progress |
+| 1 | Overlay window & global hotkeys | ⏳ |
+| 2 | Audio capture pipeline (loopback + mic + VAD) | ⏳ |
+| 3 | Provider abstraction + cloud STT/LLM/TTS | ⏳ |
+| 4 | Python sidecar + local models + model manager | ⏳ |
+| 5 | Screen context ("ask about your screen") | ⏳ |
+| 6 | Meeting integrations, sessions & export | ⏳ |
+| 7 | Packaging, auto-update & release | ⏳ |
+
+---
+
+## Why a desktop app (not a webapp)
+
+opencue's signature features — system/loopback audio capture, an always-on-top overlay excluded from screen sharing & recording, on-device speech-to-text, and screen reading — are not possible inside a browser sandbox. The app is **Electron** with a small **Python sidecar** for local inference.
+
+## Privacy & ethics
+
+- **Local mode keeps audio on-device.** When you select a local STT/TTS/LLM, no audio or transcript leaves your computer.
+- **Bring your own keys.** Cloud providers (OpenAI, Anthropic, Deepgram, ElevenLabs, …) are reached with API keys you enter yourself and that are stored encrypted via Electron `safeStorage`.
+- **No secret keylogging or covert capture.** opencue shows a visible recording indicator whenever audio is captured.
+- **Not an interview-cheating tool.** The overlay's "invisible to screen share" property is intended to keep your *personal* notes off the call — not to deceive participants or violate exam/employer policies. Use opencue where it is permitted.
+- **No telemetry.** opencue does not phone home.
+
+## Tech stack
+
+- **Shell** — Electron + electron-vite + electron-builder (added in Phase 7).
+- **UI** — React + TypeScript + Tailwind CSS, lightweight state with Zustand.
+- **Settings** — electron-store; secrets encrypted with Electron `safeStorage`.
+- **Local inference (added in Phase 4)** — Python sidecar bundled with PyInstaller; faster-whisper / NVIDIA Parakeet (STT); Piper / Kokoro (TTS); Silero (VAD).
+- **Cloud providers (added in Phase 3)** — Deepgram, OpenAI, AssemblyAI (STT); OpenAI, Anthropic, Google Gemini, Groq (LLM); ElevenLabs, OpenAI, Cartesia (TTS); Ollama for local LLM.
+
+> **Note on Parakeet:** Parakeet is NVIDIA's speech-to-text (ASR) family — it lives under STT, not TTS. Local TTS uses Piper/Kokoro.
+
+## Build from source
+
+> Prerequisites: **Node.js ≥ 20** and **npm ≥ 10**. The Python sidecar is added in Phase 4 and isn't required to run Phase 0–3 builds.
+
+```bash
+git clone https://github.com/mudassar531/opencue.git
+cd opencue
+npm install
+npm run dev
+```
+
+### Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Launch the app in development with hot-reload. |
+| `npm run build` | Type-check, lint, and produce a production build. |
+| `npm run typecheck` | Strict TypeScript check for renderer **and** main/preload. |
+| `npm run lint` | ESLint (zero errors required). |
+| `npm test` | Run Vitest unit tests. |
+| `npm run format` | Format the codebase with Prettier. |
+
+## Architecture
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system diagram and the rationale behind the main/preload/renderer split, the provider abstraction, and the Python sidecar.
+
+## Contributing
+
+Contributions are very welcome. Please read [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md) first — it is the master plan and constraints document. A formal `CONTRIBUTING.md` is added in Phase 7.
+
+## License
+
+[MIT](LICENSE) © opencue contributors.
