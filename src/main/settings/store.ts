@@ -21,6 +21,7 @@ import {
   DEFAULT_SETTINGS,
   HotkeyAction,
   type HotkeyMap,
+  type OnboardingSettings,
   type OpencueSettings,
   type OverlaySettings,
   type ProviderSelection,
@@ -85,6 +86,21 @@ function migrate(raw: unknown): OpencueSettings {
       overlay: { ...DEFAULT_OVERLAY_SETTINGS, ...candidate.overlay },
       hotkeys: { ...DEFAULT_HOTKEYS, ...candidate.hotkeys },
       providers: structuredClone(DEFAULT_SETTINGS.providers),
+      onboarding: { completed: false, completedAt: null },
+    };
+  }
+
+  // v2 → v3: introduce onboarding section.
+  if (version === 2) {
+    return {
+      schemaVersion: SETTINGS_SCHEMA_VERSION,
+      overlay: { ...DEFAULT_OVERLAY_SETTINGS, ...candidate.overlay },
+      hotkeys: { ...DEFAULT_HOTKEYS, ...candidate.hotkeys },
+      providers: {
+        ...structuredClone(DEFAULT_SETTINGS.providers),
+        ...(candidate.providers ?? {}),
+      },
+      onboarding: { completed: false, completedAt: null },
     };
   }
 
@@ -102,6 +118,7 @@ function migrate(raw: unknown): OpencueSettings {
       llm: { ...DEFAULT_SETTINGS.providers.llm, ...(candidate.providers?.llm ?? {}) },
       tts: { ...DEFAULT_SETTINGS.providers.tts, ...(candidate.providers?.tts ?? {}) },
     },
+    onboarding: { ...DEFAULT_SETTINGS.onboarding, ...(candidate.onboarding ?? {}) },
   };
 }
 
@@ -159,6 +176,19 @@ export class SettingsStore {
     return structuredClone(this.current.providers);
   }
 
+  getOnboarding(): OnboardingSettings {
+    return { ...this.current.onboarding };
+  }
+
+  markOnboardingComplete(): OnboardingSettings {
+    const previous = this.current;
+    const onboarding: OnboardingSettings = { completed: true, completedAt: Date.now() };
+    this.current = { ...previous, onboarding };
+    this.store.set('onboarding', onboarding);
+    this.emitter.emit('changed', this.current, previous);
+    return { ...onboarding };
+  }
+
   updateProviders(patch: DeepPartial<ProviderSelection>): ProviderSelection {
     const previous = this.current;
     const providers: ProviderSelection = {
@@ -196,6 +226,7 @@ export class SettingsStore {
     this.store.set('overlay', settings.overlay);
     this.store.set('hotkeys', settings.hotkeys);
     this.store.set('providers', settings.providers);
+    this.store.set('onboarding', settings.onboarding);
   }
 }
 

@@ -11,7 +11,7 @@ import { DEFAULT_PROVIDER_SELECTION, type ProviderSelection } from './provider-t
 export type { ProviderSelection } from './provider-types.js';
 
 /** Bump on every breaking change to the persisted shape. */
-export const SETTINGS_SCHEMA_VERSION = 2;
+export const SETTINGS_SCHEMA_VERSION = 3;
 
 /** Tunable opacity range for the overlay. */
 export const OVERLAY_OPACITY_MIN = 0.3;
@@ -75,11 +75,17 @@ export interface OverlaySettings {
   showOnLaunch: boolean;
 }
 
+export interface OnboardingSettings {
+  completed: boolean;
+  completedAt: number | null;
+}
+
 export interface OpencueSettings {
   schemaVersion: number;
   overlay: OverlaySettings;
   hotkeys: HotkeyMap;
   providers: ProviderSelection;
+  onboarding: OnboardingSettings;
 }
 
 export const DEFAULT_HOTKEYS: HotkeyMap = {
@@ -107,6 +113,7 @@ export const DEFAULT_SETTINGS: OpencueSettings = {
   overlay: DEFAULT_OVERLAY_SETTINGS,
   hotkeys: { ...DEFAULT_HOTKEYS },
   providers: structuredClone(DEFAULT_PROVIDER_SELECTION),
+  onboarding: { completed: false, completedAt: null },
 };
 
 /** Clamp opacity to the allowed range. Pure — safe to use in tests. */

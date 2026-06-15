@@ -58,6 +58,14 @@ export type {
   TtsProviderIdValue,
 };
 
+import type {
+  SessionListEntry,
+  SessionRecord,
+  SessionSummary,
+} from './session-types.js';
+
+export type { SessionListEntry, SessionRecord, SessionSummary };
+
 /** Status of the Python sidecar process. Mirrors `SidecarStatus` in main. */
 export type SidecarStatus =
   | { state: 'stopped' }
@@ -167,6 +175,21 @@ export const IpcChannel = {
   // Screen capture (Phase 5).
   ScreenListSources: 'screen:list-sources',
   ScreenCapture: 'screen:capture',
+
+  // Sessions (Phase 6).
+  SessionsStart: 'sessions:start',
+  SessionsStop: 'sessions:stop',
+  SessionsGetCurrent: 'sessions:get-current',
+  SessionsList: 'sessions:list',
+  SessionsLoad: 'sessions:load',
+  SessionsRemove: 'sessions:remove',
+  SessionsExportMarkdown: 'sessions:export-markdown',
+  SessionsGenerateSummary: 'sessions:generate-summary',
+  SessionsSetTitle: 'sessions:set-title',
+
+  // Onboarding (Phase 6).
+  OnboardingGet: 'onboarding:get',
+  OnboardingComplete: 'onboarding:complete',
 } as const;
 
 export type IpcChannelValue = (typeof IpcChannel)[keyof typeof IpcChannel];
@@ -406,6 +429,54 @@ export interface IpcContract {
       source: { id: string; label: string; kind: 'screen' | 'window' };
     };
   };
+
+  /* ---------- Sessions (Phase 6) ---------- */
+  [IpcChannel.SessionsStart]: {
+    request: { title?: string; sourceLabel?: string | null };
+    response: SessionRecord;
+  };
+  [IpcChannel.SessionsStop]: {
+    request: void;
+    response: SessionRecord | null;
+  };
+  [IpcChannel.SessionsGetCurrent]: {
+    request: void;
+    response: SessionRecord | null;
+  };
+  [IpcChannel.SessionsList]: {
+    request: void;
+    response: SessionListEntry[];
+  };
+  [IpcChannel.SessionsLoad]: {
+    request: { id: string };
+    response: SessionRecord | null;
+  };
+  [IpcChannel.SessionsRemove]: {
+    request: { id: string };
+    response: { ok: boolean };
+  };
+  [IpcChannel.SessionsExportMarkdown]: {
+    request: { id: string };
+    response: { filename: string; markdown: string } | null;
+  };
+  [IpcChannel.SessionsGenerateSummary]: {
+    request: { id: string };
+    response: SessionSummary | null;
+  };
+  [IpcChannel.SessionsSetTitle]: {
+    request: { title: string };
+    response: SessionRecord | null;
+  };
+
+  /* ---------- Onboarding (Phase 6) ---------- */
+  [IpcChannel.OnboardingGet]: {
+    request: void;
+    response: { completed: boolean; completedAt: number | null };
+  };
+  [IpcChannel.OnboardingComplete]: {
+    request: void;
+    response: { completed: true; completedAt: number };
+  };
 }
 
 export type IpcRequest<C extends IpcChannelValue> = IpcContract[C]['request'];
@@ -432,6 +503,7 @@ export const IpcEvent = {
   ModelStatusChanged: 'event:model-status-changed',
   SidecarStatusChanged: 'event:sidecar-status-changed',
   SidecarLog: 'event:sidecar-log',
+  SessionChanged: 'event:session-changed',
 } as const;
 
 export type IpcEventValue = (typeof IpcEvent)[keyof typeof IpcEvent];
@@ -455,6 +527,7 @@ export interface IpcEventPayloads {
   [IpcEvent.ModelStatusChanged]: ModelStatusEntry;
   [IpcEvent.SidecarStatusChanged]: SidecarStatus;
   [IpcEvent.SidecarLog]: { stream: 'stdout' | 'stderr'; text: string };
+  [IpcEvent.SessionChanged]: SessionRecord | null;
 }
 
 /* ---------------- Renderer-facing bridge ---------------- */
@@ -608,5 +681,24 @@ export interface OpencueBridge {
     capture(
       args?: { sourceId?: string },
     ): Promise<IpcResponse<typeof IpcChannel.ScreenCapture>>;
+  };
+  sessions: {
+    start(args?: {
+      title?: string;
+      sourceLabel?: string | null;
+    }): Promise<IpcResponse<typeof IpcChannel.SessionsStart>>;
+    stop(): Promise<IpcResponse<typeof IpcChannel.SessionsStop>>;
+    getCurrent(): Promise<IpcResponse<typeof IpcChannel.SessionsGetCurrent>>;
+    list(): Promise<IpcResponse<typeof IpcChannel.SessionsList>>;
+    load(id: string): Promise<IpcResponse<typeof IpcChannel.SessionsLoad>>;
+    remove(id: string): Promise<IpcResponse<typeof IpcChannel.SessionsRemove>>;
+    exportMarkdown(id: string): Promise<IpcResponse<typeof IpcChannel.SessionsExportMarkdown>>;
+    generateSummary(id: string): Promise<IpcResponse<typeof IpcChannel.SessionsGenerateSummary>>;
+    setTitle(title: string): Promise<IpcResponse<typeof IpcChannel.SessionsSetTitle>>;
+    onChanged(listener: (session: SessionRecord | null) => void): () => void;
+  };
+  onboarding: {
+    get(): Promise<IpcResponse<typeof IpcChannel.OnboardingGet>>;
+    complete(): Promise<IpcResponse<typeof IpcChannel.OnboardingComplete>>;
   };
 }

@@ -21,6 +21,7 @@ import { getHotkeyManager } from './hotkeys/hotkey-manager.js';
 import { broadcastEvent, registerIpcHandlers, wireEventBroadcasts } from './ipc.js';
 import { getModelManager } from './models/model-manager.js';
 import { getOverlayManager } from './overlay/overlay-window.js';
+import { getSessionManager } from './sessions/session-manager.js';
 import { getSettingsStore } from './settings/store.js';
 import { getSidecarManager } from './sidecar/sidecar-manager.js';
 import { IpcEvent } from '../shared/ipc-contract.js';
@@ -124,6 +125,7 @@ void app.whenReady().then(() => {
   // Initialize the model manager with the user-data dir so download paths
   // are deterministic before any IPC handler is invoked.
   getModelManager().setRoot(app.getPath('userData'));
+  getSessionManager().setRoot(app.getPath('userData'));
 
   registerIpcHandlers();
   wireEventBroadcasts();
@@ -162,6 +164,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   getHotkeyManager().unregisterAll();
   getOverlayManager().destroy();
+  void getSessionManager().stop();
   void getSidecarManager().stop();
 });
 

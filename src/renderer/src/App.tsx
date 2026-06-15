@@ -4,7 +4,9 @@ import { HotkeyAction } from '../../shared/settings-schema';
 import { AssistPanel } from './components/AssistPanel';
 import { AudioPanel } from './components/AudioPanel';
 import { LocalModelsPanel } from './components/LocalModelsPanel';
+import { OnboardingWizard, useOnboarding } from './components/OnboardingWizard';
 import { ProviderSettings } from './components/ProviderSettings';
+import { SessionsPanel } from './components/SessionsPanel';
 
 interface AppInfo {
   version: string;
@@ -27,6 +29,7 @@ export function App(): JSX.Element {
   const [settings, setSettings] = useState<OpencueSettings | null>(null);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const onboarding = useOnboarding();
 
   useEffect(() => {
     async function load(): Promise<void> {
@@ -79,15 +82,16 @@ export function App(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col items-center justify-start gap-6 overflow-y-auto bg-slate-950 p-8 text-slate-100">
+      {onboarding.active ? <OnboardingWizard onClose={onboarding.close} /> : null}
       <header className="flex flex-col items-center gap-2">
         <div className="rounded-full bg-cue-500/20 px-4 py-1 text-xs font-medium uppercase tracking-widest text-cue-300">
-          phase 4 · local models &amp; sidecar
+          phase 6 · sessions &amp; export
         </div>
         <h1 className="text-4xl font-semibold tracking-tight">opencue</h1>
         <p className="max-w-xl text-center text-sm text-slate-400">
-          Open-source meeting copilot. Cloud providers, local models via a Python
-          sidecar, or local LLMs via Ollama — switch at runtime in settings.
-          The audio pipeline + overlay stay the same.
+          Start a session, capture audio, hit Assist or Recap, and export the
+          transcript + suggestions + summary as Markdown. Cloud or local —
+          your choice.
         </p>
       </header>
 
@@ -211,6 +215,8 @@ export function App(): JSX.Element {
 
       <AudioPanel />
 
+      <SessionsPanel />
+
       <ProviderSettings />
 
       <LocalModelsPanel />
@@ -218,7 +224,7 @@ export function App(): JSX.Element {
       <AssistPanel />
 
       <footer className="text-xs text-slate-500">
-        Next up — Phase 5: on-demand screen capture for multimodal Ask.
+        Next up — Phase 7: cross-platform packaging, signing & auto-update.
       </footer>
     </div>
   );

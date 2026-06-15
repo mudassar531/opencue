@@ -143,6 +143,22 @@ const bridge: OpencueBridge = {
     listSources: () => invoke(IpcChannel.ScreenListSources),
     capture: (args) => invoke(IpcChannel.ScreenCapture, args ?? {}),
   },
+  sessions: {
+    start: (args) => invoke(IpcChannel.SessionsStart, args ?? {}),
+    stop: () => invoke(IpcChannel.SessionsStop),
+    getCurrent: () => invoke(IpcChannel.SessionsGetCurrent),
+    list: () => invoke(IpcChannel.SessionsList),
+    load: (id) => invoke(IpcChannel.SessionsLoad, { id }),
+    remove: (id) => invoke(IpcChannel.SessionsRemove, { id }),
+    exportMarkdown: (id) => invoke(IpcChannel.SessionsExportMarkdown, { id }),
+    generateSummary: (id) => invoke(IpcChannel.SessionsGenerateSummary, { id }),
+    setTitle: (title) => invoke(IpcChannel.SessionsSetTitle, { title }),
+    onChanged: (listener) => subscribe(IpcEvent.SessionChanged, listener),
+  },
+  onboarding: {
+    get: () => invoke(IpcChannel.OnboardingGet),
+    complete: () => invoke(IpcChannel.OnboardingComplete),
+  },
 };
 
 contextBridge.exposeInMainWorld('opencue', bridge);

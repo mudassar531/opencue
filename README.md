@@ -9,7 +9,7 @@
 
 ## Status
 
-🚧 Early development. Currently on **Phase 6 — Meeting integrations, sessions & export** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+🚧 Early development. Currently on **Phase 7 — Packaging, auto-update & release** of an eight-phase build. The full plan lives in [`docs/BUILD_PROMPT.md`](docs/BUILD_PROMPT.md); architecture in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -19,7 +19,7 @@
 | 3 | Provider abstraction + cloud STT/LLM/TTS | ✅ shipped |
 | 4 | Python sidecar + local models + model manager | ✅ shipped |
 | 5 | Screen context (ask about your screen) | ✅ shipped |
-| 6 | Meeting integrations, sessions & export | ⏳ |
+| 6 | Meeting integrations, sessions & export | ✅ shipped |
 | 7 | Packaging, auto-update & release | ⏳ |
 
 ---
@@ -108,6 +108,18 @@ With keys configured:
 4. Open the overlay's ask-bar (`⌘⇧/`) or use the **Ask** form in the main window to type a freeform question. Set the **TTS auto-play** toggle if you want the answer spoken.
 
 Local providers (faster-whisper / Parakeet / Piper / Kokoro / Ollama) land in Phase 4 behind the exact same interface, so switching cloud ↔ local is a single settings change.
+
+## Sessions, summaries & export (Phase 6)
+
+Every meeting can be wrapped as a **session** that's persisted to disk and re-openable later.
+
+* The **Sessions** panel in the main window has a *Start session* button (set an optional title; default is the date). Once started, every transcript line and Assist suggestion streams into the active session record and is saved to `~/Library/Application Support/opencue/sessions/<id>.json` (macOS path; equivalent on Windows / Linux).
+* **Summarize** runs a Recap prompt against the current LLM and stores the markdown summary back into the session.
+* **Copy md** copies a clean Notion-friendly Markdown export to the clipboard; **Download** saves it as `<title>.md`. The Markdown formatter is a pure helper (`formatSessionMarkdown` in `src/shared/session-types.ts`) with unit tests covering the summary / suggestions / transcript sections.
+
+### First-run wizard
+
+The first time you open opencue an onboarding wizard walks through privacy notes, OS permissions, cloud-vs-local pick, and the hotkey cheatsheet. It writes a `onboarding.completed` flag (settings schema v3) so it doesn't reappear.
 
 ## Ask about your screen (Phase 5)
 

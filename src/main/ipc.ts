@@ -30,6 +30,7 @@ import {
 } from './providers/secret-keys.js';
 import { getProviderRouter } from './providers/router.js';
 import { captureScreen, listScreenCaptureSources } from './screen/screen-capture.js';
+import { getSessionManager } from './sessions/session-manager.js';
 import { getSecretStore, getSettingsStore } from './settings/store.js';
 import { getSidecarManager } from './sidecar/sidecar-manager.js';
 
@@ -310,6 +311,57 @@ export function registerIpcHandlers(): void {
       source: result.source,
     };
   });
+
+  /* ---------------- Sessions (Phase 6) ---------------- */
+  handle(IpcChannel.SessionsStart, async (_event, args) => {
+    const startArgs: { title?: string; sourceLabel?: string | null } = {};
+    if (typeof args?.title === 'string') startArgs.title = args.title;
+    if (args && 'sourceLabel' in args) startArgs.sourceLabel = args.sourceLabel ?? null;
+    return getSessionManager().start(startArgs);
+  });
+  handle(IpcChannel.SessionsStop, () => getSessionManager().stop());
+  handle(IpcChannel.SessionsGetCurrent, () => getSessionManager().getCurrent());
+  handle(IpcChannel.SessionsList, () => getSessionManager().list());
+  handle(IpcChannel.SessionsLoad, (_event, { id }) => getSessionManager().load(id));
+  handle(IpcChannel.SessionsRemove, async (_event, { id }) => ({
+    ok: await getSessionManager().remove(id),
+  }));
+  handle(IpcChannel.SessionsExportMarkdown, (_event, { id }) =>
+    getSessionManager().exportMarkdown(id),
+  );
+  handle(IpcChannel.SessionsSetTitle, (_event, { title }) =>
+    getSessionManager().setTitle(title),
+  );
+  handle(IpcChannel.SessionsGenerateSummary, async (_event, { id }) => {
+    const orchestrator = getAssistOrchestrator();
+    // Generate the recap by running a one-shot Assist with isRecap=true.
+    const suggestion = await orchestrator.runAssist({
+      triggeredBy: 'manual',
+      isRecap: true,
+    });
+    if (!suggestion) return null;
+    const summary = {
+      body: suggestion.text,
+      providerId: suggestion.providerId,
+      ...(suggestion.model ? { model: suggestion.model } : {}),
+      generatedAt: Date.now(),
+    };
+    const current = getSessionManager().getCurrent();
+    if (current && current.id === id) {
+      await getSessionManager().setSummary(summary);
+    }
+    return summary;
+  });
+
+  /* ---------------- Onboarding (Phase 6) ---------------- */
+  handle(IpcChannel.OnboardingGet, () => {
+    const ob = getSettingsStore().getOnboarding();
+    return { completed: ob.completed, completedAt: ob.completedAt };
+  });
+  handle(IpcChannel.OnboardingComplete, () => {
+    const next = getSettingsStore().markOnboardingComplete();
+    return { completed: true as const, completedAt: next.completedAt ?? Date.now() };
+  });
 }
 
 /**
@@ -403,5 +455,9 @@ export function wireEventBroadcasts(): void {
   });
   sidecar.on('log', (entry) => {
     broadcastEvent(IpcEvent.SidecarLog, entry);
+  });
+
+  getSessionManager().on('changed', (record) => {
+    broadcastEvent(IpcEvent.SessionChanged, record);
   });
 }
